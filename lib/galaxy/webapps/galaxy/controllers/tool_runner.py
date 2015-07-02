@@ -109,6 +109,13 @@ class ToolRunner( BaseUIController ):
         if from_noframe is not None:
             add_frame.wiki_url = trans.app.config.wiki_url
             add_frame.from_noframe = True
+
+        # ProTo: if no params then this is a direct request/link to open the tool interface, redirect hyperbrowser-tools to the hyper-controller
+        if tool.tool_type.startswith('hyperbrowser') and len(params) == 0:
+            if tool.inputs.has_key('mako'):
+                return trans.response.send_redirect(url_for(controller=tool.action, tool_id=tool_id, mako=tool.inputs['mako'].get_initial_value(None, None)))
+            return trans.response.send_redirect(url_for(controller=tool.action, tool_id=tool_id))
+
         return trans.fill_template( template,
                                     history=history,
                                     toolbox=self.get_toolbox(),
@@ -275,6 +282,11 @@ class ToolRunner( BaseUIController ):
         if from_noframe is not None:
             add_frame.wiki_url = trans.app.config.wiki_url
             add_frame.from_noframe = True
+
+#        if tool.action == '/hyper':
+        if tool.tool_type.startswith('hyperbrowser'):
+            return trans.response.send_redirect(url_for(controller='proto', action='index', mako=params_objects.get('mako','generictool'), rerun_hda_id=id))
+
         return trans.fill_template( template,
                                     history=history,
                                     toolbox=self.get_toolbox(),

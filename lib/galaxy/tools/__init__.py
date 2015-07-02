@@ -2973,6 +2973,10 @@ for tool_class in [ Tool, SetMetadataTool, OutputParameterJSONTool,
                     DataDestinationTool ]:
     tool_types[ tool_class.tool_type ] = tool_class
 
+# add ProTo tool types
+from proto.HyperBrowserToolTypes import hb_tool_types
+tool_types.update(hb_tool_types)
+
 
 # ---- Utility classes to be factored out -----------------------------------
 class TracksterConfig:
