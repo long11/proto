@@ -64,7 +64,7 @@ def getProtoToolList(except_class_names=[]):
     pys = []
     for d in os.walk(PROTO_TOOL_DIR):
         if d[0].find('.svn') == -1:
-            pys += [os.path.join(d[0], f) for f in d[2] if f.endswith('.py')]
+            pys += [os.path.join(d[0], f) for f in d[2] if f.endswith('.py') and not any(f.startswith(x) for x in ['.', '#'])]
     
     #print 'Num py', len(pys)        
     for fn in pys:
@@ -276,7 +276,10 @@ class GenerateToolsTool(GeneralGuiTool):
 
     @staticmethod
     def getInputBoxNames():
-        return [('Package name', 'packageName'), ('Module name', 'moduleName'), ('Tool name', 'toolName')]
+        return [('Package name', 'packageName'),
+                ('Module name', 'moduleName'),
+                ('Tool name', 'toolName'),
+                ('Use template with inline documentation', 'template')]
 
     #@staticmethod
     #def getResetBoxes():
@@ -293,6 +296,10 @@ class GenerateToolsTool(GeneralGuiTool):
     @staticmethod
     def getOptionsBoxToolName(prevchoices):
         return 'Title of tool'
+
+    @staticmethod
+    def getOptionsBoxTemplate(prevchoices):
+        return ['Yes', 'No']
     
     @staticmethod
     def execute(choices, galaxyFn=None, username=''):
@@ -305,7 +312,11 @@ class GenerateToolsTool(GeneralGuiTool):
             open(packageDir + '/__init__.py', 'a').close()
             
         pyname = packageDir + '/' + choices.moduleName + '.py'
-        templatefn = PROTO_TOOL_DIR + 'ToolTemplateMinimal.py'
+        
+        if choices.template == 'Yes':
+            templatefn = PROTO_TOOL_DIR + 'ToolTemplate.py'
+        else:
+            templatefn = PROTO_TOOL_DIR + 'ToolTemplateMinimal.py'
         
         with open(templatefn) as t:
             template = t.read()
