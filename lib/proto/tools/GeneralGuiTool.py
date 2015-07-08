@@ -38,7 +38,8 @@ class GeneralGuiTool(object):
 
     @classmethod
     def isBatchTool(cls):
-        return cls.isHistoryTool()
+        return False
+#        return cls.isHistoryTool()
 
     @staticmethod
     def isDynamic():
