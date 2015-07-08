@@ -19,6 +19,7 @@ database/pbs
 database/tmp
 database/*.sqlite
 database/openid_consumer_cache
+database/proto-tool-cache.shelve
 
 # Python bytecode
 *.pyc
