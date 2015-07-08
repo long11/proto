@@ -1,8 +1,5 @@
 from proto.tools.GeneralGuiTool import GeneralGuiTool
 
-# This is a template prototyping GUI that comes together with a corresponding
-# web page.
-
 class ToolTemplate(GeneralGuiTool):
     @staticmethod
     def getToolName():
@@ -28,7 +25,8 @@ class ToolTemplate(GeneralGuiTool):
         getOptionsBoxK, where K is either a number in the range of 1 to the
         number of boxes (case 1), or the specified key (case 2).
         '''
-        return [('First header','firstKey'),('Second Header', 'secondKey')]
+        return [('First header','firstKey'),
+                ('Second Header', 'secondKey')]
 
     #@staticmethod
     #def getInputBoxOrder():
@@ -224,7 +222,8 @@ class ToolTemplate(GeneralGuiTool):
     #    batch run line can be fetched from the info box at the bottom of the
     #    tool.
     #    '''
-    #    return cls.isHistoryTool()
+    #    return False
+    ##    return cls.isHistoryTool()
     #
     #@staticmethod
     #def isDebugMode():

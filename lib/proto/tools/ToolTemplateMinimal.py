@@ -1,8 +1,5 @@
 from proto.tools.GeneralGuiTool import GeneralGuiTool
 
-# This is a template prototyping GUI that comes together with a corresponding
-# web page.
-
 class ToolTemplate(GeneralGuiTool):
     @staticmethod
     def getToolName():
@@ -10,40 +7,37 @@ class ToolTemplate(GeneralGuiTool):
 
     @staticmethod
     def getInputBoxNames():
-        return ['box1','box2'] #Alternatively: [ ('box1','key1'), ('box2','key2') ]
+        return [('First header','firstKey'),
+                ('Second Header', 'secondKey')]
 
     #@staticmethod
     #def getInputBoxOrder():
     #    return None
-    
-    @staticmethod    
-    def getOptionsBox1(): # Alternatively: getOptionsBoxKey1()
+
+    @staticmethod
+    def getOptionsBoxFirstKey():
+        return ['testChoice1', 'testChoice2', '...']
+
+    @staticmethod
+    def getOptionsBoxSecondKey(prevChoices):
         return ''
-        
-    @staticmethod    
-    def getOptionsBox2(prevChoices):
-        return ['']
-
-    #@staticmethod    
-    #def getOptionsBox3(prevChoices):
-    #    return ['']
-
-    #@staticmethod    
-    #def getOptionsBox4(prevChoices):
-    #    return ['']
 
     #@staticmethod
     #def getDemoSelections():
     #    return ['testChoice1','..']
-        
-    @staticmethod    
+
+    @staticmethod
     def execute(choices, galaxyFn=None, username=''):
         print 'Executing...'
 
     @staticmethod
     def validateAndReturnErrors(choices):
         return None
-        
+
+    #@staticmethod
+    #def getSubToolClasses():
+    #    return None
+    #
     #@staticmethod
     #def isPublic():
     #    return False
@@ -57,13 +51,38 @@ class ToolTemplate(GeneralGuiTool):
     #    return ''
     #
     #@staticmethod
+    #def isHistoryTool():
+    #    return True
+    #
+    #@staticmethod
+    #def isDynamic():
+    #    return True
+    #
+    #@staticmethod
+    #def getResetBoxes():
+    #    return []
+    #
+    #@staticmethod
     #def getToolDescription():
     #    return ''
-
+    #
+    #@staticmethod
+    #def getToolIllustration():
+    #    return None
+    #
+    #@staticmethod
+    #def getFullExampleURL():
+    #    return None
+    #
+    #@classmethod
+    #def isBatchTool(cls):
+    #    return False
+    ##    return cls.isHistoryTool()
+    #
     #@staticmethod
     #def isDebugMode():
     #    return False
     #
-    #@staticmethod    
+    #@staticmethod
     #def getOutputFormat(choices):
     #    return 'html'
