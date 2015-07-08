@@ -137,7 +137,12 @@
 	opacity: 0.50;
 	filter:alpha(opacity=50);
 	z-Index:1000;
-	background: #EEEEEE url("static/proto/images/dna.gif") no-repeat center center fixed;
+        background-color: #EEEEEE;
+        background-image: url("static/proto/images/rays.gif");
+        background-repeat: no-repeat;
+        background-attachment: fixed;
+        background-position: center center;
+        background-size: 32px;
     }
 
     </style>
