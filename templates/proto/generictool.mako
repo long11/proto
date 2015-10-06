@@ -25,7 +25,7 @@ import proto.hyper_gui as gui
 <%
 params = control.params
 
-if control.prototype.isRedirectTool() or not control.prototype.isHistoryTool():
+if control.isRedirectTool() or not control.prototype.isHistoryTool():
     formAction = '?'
 else:
     formAction = h.url_for('/tool_runner')
@@ -57,7 +57,7 @@ else:
     <INPUT TYPE="HIDDEN" NAME="extra_output" VALUE="${quote(json.dumps(control.extra_output))}">
 
     %if len(control.subClasses) > 0:
-        ${functions.select('sub_class_id', control.subClasses.keys(), control.subClassId, 'Select subtool:')}
+        ${functions.select('sub_class_id', control.subClasses.keys(), control.subClassId, control.subToolSelectionTitle)}
     %endif
 
     %for i in control.inputOrder:
