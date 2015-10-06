@@ -55,3 +55,9 @@ if [ $FETCH_EGGS -eq 1 ]; then
         fi
     fi
 fi	
+
+PROTO_TOOL_CACHE="database/proto-tool-cache.shelve"
+if [ -f $PROTO_TOOL_CACHE ]; then
+    echo -n "Clearing ProTo register... "
+    rm -v $PROTO_TOOL_CACHE
+fi
