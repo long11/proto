@@ -112,7 +112,7 @@ class ExploreToolsTool(MultiGeneralGuiTool):
     @classmethod
     def getSubToolClasses(cls):
         tool_shelve = shelve.open(TOOL_SHELVE, 'r')
-        installed_classes = [tool_shelve.get(t)[1] for t in tool_shelve.keys()]
+        installed_classes = [tool_shelve.get(t)[1] for t in tool_shelve.keys() if os.path.exists(os.path.join(SOURCE_CODE_BASE_DIR, tool_shelve.get(t)[0].replace('.', os.path.sep)) + '.py') ]                
         tool_shelve.close()
         tool_list = getProtoToolList(installed_classes)[1]
         return sorted(tool_list, key=lambda c: c.__name__)
