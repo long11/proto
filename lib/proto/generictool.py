@@ -70,6 +70,7 @@ class GenericToolController(BaseToolController):
         self.subClasses = OrderedDict()
         subClasses = self.prototype.getSubToolClasses()
         if subClasses:
+            self.subToolSelectionTitle = self.prototype.getSubToolSelectionTitle()
             self.subClasses[self.prototype.getToolSelectionName()] = self.prototype
             for subcls in subClasses:
                 toolSelectionName = subcls.getToolSelectionName()
@@ -523,13 +524,17 @@ class GenericToolController(BaseToolController):
             pass
         return False
 
+    def isRedirectTool(self):
+        try:
+            return self.prototype.isRedirectTool(self.choices)
+        except TypeError:
+            return self.prototype.isRedirectTool()
+
     def doRedirect(self):
-        return self.prototype.isRedirectTool() and self.params.has_key('start')
-        #return True
+        return self.isRedirectTool() and self.getRedirectURL() and self.params.has_key('start')
 
     def getRedirectURL(self):
-        return self.prototype.getRedirectURL(self.inputValues)
-        #return 'http://www.vg.no'
+        return self.prototype.getRedirectURL(self.choices)
 
     def validate(self):
         #ChoiceTuple = namedtuple('ChoiceTuple', self.inputIds)
