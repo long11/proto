@@ -72,15 +72,15 @@ class ProtoController( BaseUIController ):
         proc = Process(target=self.__index_pipe, args=(your_end,trans,str(mako)))
         proc.start()
         html = ''
-        #if proc.is_alive():
-        if my_end.poll(60):
-            html = my_end.recv_bytes()
-            my_end.close()
+        if proc.is_alive():
+            if my_end.poll(60):
+                html = my_end.recv_bytes()
+                my_end.close()
+            else:
+                log.warn('fork timed out after 60 sec')
         else:
-            log.warn('fork timed out after 60 sec')
-        #else:
-        #    log.warn('fork died on startup')
-        proc.join(5)
+            log.warn('fork died on startup')
+        proc.join(1)
         if proc.is_alive():
             proc.terminate()
             log.warn('fork did not exit, terminated.')
