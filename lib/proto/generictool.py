@@ -17,6 +17,9 @@
 # instance is dynamically imported into namespace of <modulename>.mako template (see web/controllers/hyper.py)
 
 import sys, os, json, shelve
+import cPickle as pickle
+from zlib import compress, decompress
+from base64 import urlsafe_b64decode, urlsafe_b64encode
 from collections import namedtuple, OrderedDict
 from urllib import quote, unquote
 #from gold.application.GalaxyInterface import GalaxyInterface
@@ -48,6 +51,7 @@ class GenericToolController(BaseToolController):
             self.oldValues = {}
             self.use_default = True
 
+
         self.subClassId = unquote(self.params.get('sub_class_id', ''))
         self.prototype = None
 
@@ -76,7 +80,8 @@ class GenericToolController(BaseToolController):
                 toolSelectionName = subcls.getToolSelectionName()
                 if self.prototype.useSubToolPrefix():
 #                    toolSelectionName = subcls.__class__.__name__ + ': ' + toolSelectionName
-                    toolSelectionName = subcls.__name__ + ': ' + toolSelectionName
+                    toolSelectionName = '.'.join(subcls.__module__.split('.')[2:]) + '.' + subcls.__name__ + ': ' + toolSelectionName
+#                    toolSelectionName = subcls.__name__ + ': ' + toolSelectionName
                 self.subClasses[toolSelectionName] = subcls
 
         self.resetAll = False
@@ -101,6 +106,8 @@ class GenericToolController(BaseToolController):
         self.trackElements = {}
         self.extra_output = []
 
+
+        self._initCache()
         if trans:
             self.action()
             if hasattr(self.prototype, 'getExtraHistElements'):
@@ -179,8 +186,54 @@ class GenericToolController(BaseToolController):
                     info = getattr(self.prototype, 'getInfoForOptionsBox' + id)()
                 except:
                     pass
+        return opts, info
+
+
+    def _initCache(self):
+        self.input_changed = False
+        try:
+            self.cachedParams = json.loads(decompress(urlsafe_b64decode(str(self.params.get('cached_params')))))
+        except:
+            self.cachedParams = {}
+            
+        try:
+            self.cachedOptions = json.loads(decompress(urlsafe_b64decode(str(self.params.get('cached_options')))))
+        except:
+            self.cachedOptions = {}
+
+        try:
+            self.cachedExtra = json.loads(decompress(urlsafe_b64decode(str(self.params.get('cached_extra')))))
+        except:
+            self.cachedExtra = {}
+
+    def putCacheData(self, id, data):
+        self.cachedExtra[id] = pickle.dumps(data)
+
+    def getCacheData(self, id):
+        return pickle.loads(str(self.cachedExtra[id]))
+
+    def getOptionsBox(self, id, i, val):
+        #print id, '=', val, 'cache=', self.cachedParams[id] if id in self.cachedParams else 'NOT'
+        
+        if self.input_changed or id not in self.cachedParams:
+            opts, info = self._getOptionsBox(i, val)
+            self.input_changed = True
+        else:
+            try:
+                opts, info = pickle.loads(str(self.cachedOptions[id]))
+                #print 'from cache:',id
+                self.input_changed = (val != self.cachedParams[id])
+            except Exception as e:
+                print 'cache load fail', e
+                opts, info = self._getOptionsBox(i, val)
+                self.input_changed = True
+        
+        #print repr(opts)
+        self.cachedParams[id] = val
+        self.cachedOptions[id] = pickle.dumps((opts, info))        
         self.inputInfo.append(info)
         return opts
+
 
     def action(self):
         self.options = []
@@ -193,8 +246,9 @@ class GenericToolController(BaseToolController):
                 val = self.initChoicesDict[id]
             else:
                 val = self.params.get(id)
+                
             display_only = False
-            opts = self._getOptionsBox(i, val)
+            opts = self.getOptionsBox(id, i, val)
 
             if reset and not self.initChoicesDict:
                 val = None
@@ -206,7 +260,11 @@ class GenericToolController(BaseToolController):
             elif isinstance(opts, dict) or opts == '__genomes__':
                 self.inputTypes += ['multi']
                 if opts == '__genomes__':
-                    opts = self.getDictOfAllGenomes()
+                    try:
+                        opts = self.cachedExtra[id]
+                    except:
+                        opts = self.getDictOfAllGenomes()
+                        self.cachedExtra[id] = opts
                 if not self.initChoicesDict:
                     values = type(opts)()
                     for k,v in opts.items():
@@ -217,23 +275,43 @@ class GenericToolController(BaseToolController):
             elif isinstance(opts, str) or isinstance(opts, unicode):
                 if opts == '__genome__':
                     self.inputTypes += ['__genome__']
+                    try:
+                        genomeCache = self.getCacheData(id)
+                    except Exception as e:
+                        print 'genome cache error', e
+                        genomeCache = self._getAllGenomes()
+                        self.putCacheData(id, genomeCache)
+                        
+                    opts = self.getGenomeElement(id, genomeCache)
                     val = self.getGenome(id)
+
                 elif opts == '__track__':
                     self.inputTypes += ['__track__']
-                    track = self.trackElements[id] = self.getTrackElement(id, name)
+                    try:
+                        #assert False
+                        cachedTracks = self.getCacheData(id)
+                        track = self.getTrackElement(id, name, tracks=cachedTracks)
+                    except:
+                        print 'track cache fail'
+                        track = self.getTrackElement(id, name)
+                        self.putCacheData(id, track.tracks)
+                    self.trackElements[id] = track
                     tn = track.definition(False)
                     GalaxyInterface.cleanUpTrackName(tn)
                     val = ':'.join(tn)
                     #val = track.asString()
+
                 elif opts == '__password__':
                     self.inputTypes += ['__password__']
                     if val == None:
                         val = ''
+
                 else:
                     self.inputTypes += ['text']
                     if val == None:
                         val = opts
                     opts = (val, 1, False)
+
             elif isinstance(opts, tuple):
                 if opts[0] == '__history__':
                     self.inputTypes += opts[:1]
@@ -271,8 +349,8 @@ class GenericToolController(BaseToolController):
                     self.inputTypes += opts[:1]
                     if opts[1] != None:
                         val = opts[1]
-                    elif val:
-                        val = unquote(val)
+                    #elif val:
+                    #    val = unquote(val)
                 elif len(opts) in [2, 3] and (isinstance(opts[0], str) or isinstance(opts[0], unicode)):
                     if len(opts) == 2:
                         opts = opts + (False,)
@@ -320,7 +398,7 @@ class GenericToolController(BaseToolController):
             #    if val == None:
             #        val = ''
 
-            self.displayValues.append(val)
+            self.displayValues.append(val if isinstance(val, basestring) else repr(val))
             self.inputValues.append(None if display_only else val)
             self.options.append(opts)
 
@@ -347,7 +425,7 @@ class GenericToolController(BaseToolController):
             id = self.inputIds[i]
             choice = self.params[id] if self.params.has_key(id) else ''
 
-            opts = self._getOptionsBox(i, choice)
+            opts = self.getOptionsBox(id, i, choice)
             if opts == '__genome__':
                 id = 'dbkey'
                 choice = self.params[id] if self.params.has_key(id) else ''
@@ -559,4 +637,12 @@ class GenericToolController(BaseToolController):
 
 
 def getController(transaction = None, job = None):
-    return GenericToolController(transaction, job)
+    #from gold.util.Profiler import Profiler
+    #prof = Profiler()
+    #prof.start()
+    control = GenericToolController(transaction, job)
+    #prof.stop()
+    #prof.printStats()
+    
+    return control
+    #return GenericToolController(transaction, job)
