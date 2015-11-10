@@ -16,6 +16,9 @@
 #    along with The Genomic HyperBrowser.  If not, see <http://www.gnu.org/licenses/>.
 
 import sys, os, traceback, json
+import cPickle as pickle
+from zlib import compress
+from base64 import urlsafe_b64encode
 from cgi import escape
 from urllib import quote, unquote
 
@@ -48,6 +51,9 @@ else:
 
     <form method="post" action="${formAction}">
 
+    <INPUT TYPE="HIDDEN" NAME="cached_options" VALUE="${urlsafe_b64encode(compress(json.dumps(control.cachedOptions)))}">
+    <INPUT TYPE="HIDDEN" NAME="cached_params" VALUE="${urlsafe_b64encode(compress(json.dumps(control.cachedParams)))}">
+    <INPUT TYPE="HIDDEN" NAME="cached_extra" VALUE="${urlsafe_b64encode(compress(json.dumps(control.cachedExtra)))}">
     <INPUT TYPE="HIDDEN" NAME="old_values" VALUE="${quote(json.dumps(control.oldValues))}">
     <INPUT TYPE="HIDDEN" NAME="datatype" VALUE="${control.prototype.getOutputFormat(control.choices)}">
     <INPUT TYPE="HIDDEN" NAME="mako" VALUE="generictool">
@@ -64,7 +70,7 @@ else:
         %if control.inputTypes[i] == 'select':
             ${functions.select(control.inputIds[i], control.options[i], control.displayValues[i], control.inputNames[i], info=control.inputInfo[i])}
         %elif control.inputTypes[i] == 'multi':
-            ${functions.multichoice(control.inputIds[i], control.options[i], control.displayValues[i], control.inputNames[i], info=control.inputInfo[i])}
+            ${functions.multichoice(control.inputIds[i], control.options[i], control.inputValues[i], control.inputNames[i], info=control.inputInfo[i])}
         %elif control.inputTypes[i] == 'checkbox':
             ${functions.checkbox(control.inputIds[i], control.options[i], control.displayValues[i], control.inputNames[i], info=control.inputInfo[i])}
         %elif control.inputTypes[i] == 'text':
@@ -76,7 +82,7 @@ else:
         %elif control.inputTypes[i] == '__password__':
             ${functions.password(control.inputIds[i], control.displayValues[i], control.inputNames[i], reload=control.prototype.isDynamic(), info=control.inputInfo[i])}
         %elif control.inputTypes[i] == '__genome__':
-            ${functions.genomeChooser(control)}
+            ${functions.genomeChooser(control, control.options[i], control.inputValues[i], control.inputIds[i])}
         %elif control.inputTypes[i] == '__track__':        
             ${functions.trackChooser(control.trackElements[control.inputIds[i]], i, params, False)}
         %elif control.inputTypes[i] == '__history__':
@@ -84,9 +90,9 @@ else:
         %elif control.inputTypes[i] == '__toolhistory__':
             ${functions.history_select(control, control.inputIds[i], control.options[i], control.displayValues[i], control.inputNames[i], info=control.inputInfo[i])}
         %elif control.inputTypes[i] == '__multihistory__':
-            ${functions.multihistory(control.inputIds[i], control.options[i], control.displayValues[i], control.inputNames[i], info=control.inputInfo[i])}
+            ${functions.multihistory(control.inputIds[i], control.options[i], control.inputValues[i], control.inputNames[i], info=control.inputInfo[i])}
         %elif control.inputTypes[i] == '__hidden__':
-            <input type="hidden" name="${control.inputIds[i]}" id="${control.inputIds[i]}" value="${control.displayValues[i]}">
+            <input type="hidden" name="${control.inputIds[i]}" id="${control.inputIds[i]}" value="${escape(control.displayValues[i], True)}">
         %elif control.inputTypes[i] == 'table':
             ${control.displayValues[i]}
         %endif

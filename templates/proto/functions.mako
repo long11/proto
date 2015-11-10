@@ -19,6 +19,8 @@
 import sys
 from cgi import escape
 from urllib import quote, unquote
+import json
+from string import lower
 
 import proto.hyper_gui as gui
 %>
@@ -58,25 +60,20 @@ import proto.hyper_gui as gui
     </p>
 </%def>
 
-<%def name="multichoice(name, opts, values, label = None, info = None)">
-    <fieldset><legend>${label}</legend>
-        <a href="javascript:;" id="${name}_check" onclick="$('input.${name}').attr('checked',true);reloadForm(null, this);">Check all</a>
-        <a href="javascript:;" id="${name}_uncheck" onclick="$('input.${name}').removeAttr('checked');reloadForm(null, this)">Uncheck all</a><br/>
-        %for key,value in opts.items():
-            <label><input onchange="reloadForm(form, this)" class="${name}" id="${name + '|' + key}" name="${name + '|' + key}" type="checkbox" value="True" ${'checked=checked' if values and values[key] else 'checked=checked' if value and not values else ''}> ${key}</label><br/>
-        %endfor
-        <input type="hidden" name="${name}" value="${len(opts)}">
-    </fieldset>
-</%def>
 
 <%def name="multihistory(name, opts, values, label = None, info = None)">
+    ${multichoice(name, opts, values, label, info, history=True)}
+</%def>
+
+
+<%def name="multichoice(name, opts, values, label = None, info = None, history = False)">
     <fieldset><legend>${label}</legend>
-        <a href="javascript:;" id="${name}_check" onclick="$('input.${name}').attr('checked',true);reloadForm(null, this);">Check all</a>
+        <a href="javascript:;" id="${name}_check" onclick="$('input.${name}').attr('checked','checked');reloadForm(null, this);">Check all</a>
         <a href="javascript:;" id="${name}_uncheck" onclick="$('input.${name}').removeAttr('checked');reloadForm(null, this)">Uncheck all</a><br/>
-        %for key,value in opts.items():
-            <label><input onchange="reloadForm(form, this)" class="${name}" id="${name + '|' + key}" name="${name + '|' + key}" type="checkbox" value="${value}" ${'checked=checked' if values and values[key] else 'checked=checked' if value and not values else ''}> ${unquote(value.split(':')[3])}</label><br/>
+        %for key,value in opts.items():            
+            <label><input onchange="updateMultiChoice(this, '${name}', '${key}', ${history|lower});reloadForm(form, this)" class="${name}" id="${name + '|' + key}" name="${name + '|' + key}" type="checkbox" value="${value if history else 'True'}" ${'checked=checked' if values and values[key] else 'checked=checked' if value and not values else ''}> ${unquote(value.split(':')[3]) if history else key}</label><br/>
         %endfor
-        <input type="hidden" name="${name}" value="${len(opts)}">
+        <input type="hidden" name="${name}" id="${name}" value="${escape(json.dumps(values), True)}">
     </fieldset>
 </%def>
 
@@ -107,6 +104,7 @@ import proto.hyper_gui as gui
     </label></p>
 </%def>
 
+
 <%def name="trackChooser(track, i, params, do_reset=True, readonly=False)">
     <%
         galaxy = gui.GalaxyWrapper(trans)
@@ -120,23 +118,18 @@ import proto.hyper_gui as gui
 
     # reset stats parameter when changing track
     if do_reset:
-        typeElement.onChange = "if ($('#_stats')){$('#_stats').val('');$('#stats').val('');}" + typeElement.onChange
+        typeElement.onChange = "\nif ($('#_stats')){$('#_stats').val('');$('#stats').val('');}\n" + typeElement.onChange
+        
+    #typeElement.onChange = "\nif ($('#%(id)s')){\n $('#%(id)s').val( $('%(id)s').val() + ':' + $(this).val() ); }\n" % {'id': track.nameMain} + typeElement.onChange
+    typeElement.onChange = "appendValueFromInputToInput(this, '#" + track.nameMain + "'); " + typeElement.onChange
     %>
     ${typeElement.getHTML()} ${typeElement.getScript()}
 
     %if track.valueLevel(0) == 'galaxy':
             <select name="${track.nameFile}" onchange="form.action='?';form.submit()">
                 ${track.optionsFromHistory(params.get(track.nameFile))}
-##                ${galaxy.optionsFromHistory(hyper.getSupportedGalaxyFileFormats(), params.get(track.nameFile))}
             </select>
 
-##    %elif track.valueLevel(0) == '__recent_tracks':
-##            <select name="${track.nameRecent}" onchange="setTrackToRecent('${track.nameMain}', this, form)">
-##                <option value=""> -- Select -- </option>
-##                %for t in track.recentTracks:
-##                    <option value="${t}">${t}</option>
-##                %endfor
-##            </select>
     %else:
         %for j in range(1, 10):
             %if track.getTracksForLevel(j):
@@ -147,6 +140,8 @@ import proto.hyper_gui as gui
                 %else:
                     <%
                     levelElement = gui.TrackSelectElement(track, j)
+                    #levelElement.onChange = "\nif ($('#%(id)s')){\n $('#%(id)s').val( $('%(id)s').val() + ':' + $(this).val() ); }\n" % {'id': track.nameMain} + levelElement.onChange
+		    levelElement.onChange = "appendValueFromInputToInput(this, '#" + track.nameMain + "'); " + levelElement.onChange
                     %>
                     <div style="margin-left:${j}em">|_ ${levelElement.getHTML()} ${levelElement.getScript()}</div>
                 %endif
@@ -183,12 +178,6 @@ import proto.hyper_gui as gui
         <br>&nbsp;<br>
     %endif
 
-    <%
-##    if track.selected():
-##        valid = hyper.trackValid(genome, track.definition())
-##    else:
-##        valid = True
-    %>
     %if track.valid != True:
         <div class="errormessagesmall">${track.valid}</div>
     %endif
@@ -327,15 +316,21 @@ import proto.hyper_gui as gui
 
 </%def>
 
-<%def name="genomeChooser(control, genomeElement = None, genome = None)">
+<%def name="genomeChooser(control, genomeElement = None, genome = None, id='dbkey')">
     <%
     if genomeElement == None:
-        genomeElement = control.getGenomeElement()
+        genomeElement = control.getGenomeElement(id)
     if genome == None:
         genome = control.getGenome()
+
+    if id != 'dbkey':
+        genomeElement.onChange = '$("#dbkey").val($(this).val());' + genomeElement.onChange
     %>
 
     Genome build: ${genomeElement.getHTML()} ${genomeElement.getScript()}
+    %if id != 'dbkey':
+        <input type="hidden" id="dbkey" name="dbkey" value="${genome}">
+    %endif
     <%
         sti_val = control.params.get('show_genome_info', '0')
         if sti_val == '1':
