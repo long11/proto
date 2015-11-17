@@ -82,7 +82,13 @@ def getProtoToolList(except_class_names=[]):
                             prototype_cls = getattr(module, class_name)
                             if issubclass(prototype_cls, GeneralGuiTool) and not issubclass(prototype_cls, MultiGeneralGuiTool) and hasattr(prototype_cls, 'getToolName'):
                                 prototype = prototype_cls('hb_no_tool_id_yet')
-                                tools[class_name] = (fn, m.group(2), prototype_cls, module_name)
+                                toolModule = module_name.split('.')[2:]
+                                if class_name != toolModule[-1]:
+                                    toolSelectionName = '.'.join(toolModule) + ' [' + class_name + ']'
+                                else:
+                                    toolSelectionName = '.'.join(toolModule)
+
+                                tools[toolSelectionName] = (fn, m.group(2), prototype_cls, module_name)
                                 tool_classes.append(prototype_cls)
                         except Exception as e:
                             traceback.print_exc()
@@ -206,7 +212,8 @@ class InstallToolsTool(GeneralGuiTool):
     def getOptionsBoxToolID(cls, prevchoices):
         if prevchoices.tool is None or prevchoices.tool.startswith('--'):
             return ''
-        return 'ProTo_' + prevchoices.tool
+        tool_list = cls._getToolList()
+        return 'ProTo_' + tool_list[prevchoices.tool][2].__name__
 
     @classmethod
     def getOptionsBoxName(cls, prevchoices):
@@ -224,7 +231,7 @@ class InstallToolsTool(GeneralGuiTool):
         if prototype is not None:
             package = prototype.__module__.split('.')
             package_dir = '/'.join(package[2:-1]) + '/' if len(package) > 3 else ''
-            return 'proto/' + package_dir + prevchoices.tool + '.xml'
+            return 'proto/' + package_dir + prototype.__class__.__name__ + '.xml'
 
     @classmethod
     def getOptionsBoxSection(cls, prevchoices):

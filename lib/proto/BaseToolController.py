@@ -41,11 +41,11 @@ class BaseToolController(object):
             self.params['tool_id'] = self.params['tool_name']
 
     def action(self):
-        'to be called from mako'
+        'is called from web-request'
         pass
 
     def execute(self):
-        'to be called from job-script'
+        'is called from job-runner'
         pass
 
     def stdoutToHistory(self):
@@ -62,9 +62,15 @@ class BaseToolController(object):
 
     def userIsOneOfUs(self):
         return Config.userHasFullAccess(self.galaxy.getUserName())
+
+    def _getGalaxyGenomes(self):
+        #from galaxy.tools.parameters.basic import GenomeBuildParameter
+        #return GenomeBuildParameter().get_legal_values()
+        return [(gb[1], gb[0], False) for gb in self.transaction.app.genome_builds.get_genome_build_names()]
     
     def _getAllGenomes(self):
-        return [('----- Select -----', '', False)] + GalaxyInterface.getAllGenomes(self.galaxy.getUserName())
+        #return [('----- Select -----', '', False)] + GalaxyInterface.getAllGenomes(self.galaxy.getUserName())
+        return [('----- Select -----', '', False)] + self._getGalaxyGenomes()
         
     def getGenomeElement(self, id='dbkey', genomeList = None):    
         return SelectElement(id, self._getAllGenomes() if genomeList is None else genomeList, self.getGenome())

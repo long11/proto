@@ -29,6 +29,17 @@ class ProtoController( BaseUIController ):
 
     @staticmethod
     def __index_pipe(response, trans, tool):
+        # logging locks and/or atexit handlers may be cause of deadlocks in a fork from thread
+        # attempt to fix by shutting down and reloading logging module and clear exit handlers
+        #logging.shutdown()
+        import atexit
+        #for handler in atexit._exithandlers:
+        #    print repr(handler)
+        #    handler[0]()
+        atexit._exithandlers = []
+        reload(logging)
+        #log.warning('fork log test')
+        
         exc_info = None
         html = ''
         try:

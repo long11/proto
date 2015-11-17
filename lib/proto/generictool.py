@@ -80,8 +80,11 @@ class GenericToolController(BaseToolController):
                 toolSelectionName = subcls.getToolSelectionName()
                 if self.prototype.useSubToolPrefix():
 #                    toolSelectionName = subcls.__class__.__name__ + ': ' + toolSelectionName
-                    toolSelectionName = '.'.join(subcls.__module__.split('.')[2:]) + '.' + subcls.__name__ + ': ' + toolSelectionName
-#                    toolSelectionName = subcls.__name__ + ': ' + toolSelectionName
+                    toolModule = subcls.__module__.split('.')[2:]
+                    if subcls.__name__ != toolModule[-1]:
+                        toolSelectionName = '.'.join(toolModule) + ' [' + subcls.__name__ + ']: ' + toolSelectionName
+                    else:
+                        toolSelectionName = '.'.join(toolModule) + ': ' + toolSelectionName
                 self.subClasses[toolSelectionName] = subcls
 
         self.resetAll = False

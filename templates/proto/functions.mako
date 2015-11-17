@@ -339,14 +339,14 @@ import proto.hyper_gui as gui
         else:
             sti_class = 'showInfo'
             sti_display = 'display:none'
-        genomeInfo = hyper.getGenomeInfo(genome)
+        genomeInfo = hyper.getGenomeInfo(genome) if hyper else None
 
     %>
     %if genomeInfo:
         <img class="${sti_class}" src="${h.url_for('/static/style/info_small.png')}" alt="Genome info" title="Genome information" onclick="getGenomeInfo(document.forms[0], this, '${genome}')"/>
         <div id="genome_info" class="infomessagesmall" style="${sti_display}"> ${genomeInfo} </div>
         <input type="hidden" name="show_genome_info" id="show_genome_info" value="${sti_val}">
-    %elif genome:
+    %elif hyper and genome:
         %if genome != '?':
             <div class="errormessagesmall">
             ${genome} is not yet supported by HyperBrowser.<br>
