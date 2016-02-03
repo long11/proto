@@ -29,7 +29,7 @@ class GeneralGuiTool(object):
         return False
 
     @staticmethod
-    def isRedirectTool():
+    def isRedirectTool(choices=None):
         return False
 
     @staticmethod
@@ -442,6 +442,10 @@ class MultiGeneralGuiTool(GeneralGuiTool):
     @staticmethod
     def getToolSelectionName():
         return "-----  Select tool -----"
+
+    @staticmethod
+    def getSubToolSelectionTitle():
+        return 'Select subtool:'
 
     @staticmethod
     def validateAndReturnErrors(choices):
