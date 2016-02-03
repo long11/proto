@@ -408,6 +408,22 @@
         validate(document.forms['form']);
         return false;
     }
+
+    function appendValueFromInputToInput(from, to) {
+        if (to.value) {
+            to.value += ':' + from.value;
+        } else {
+            to.value = from.value;
+        }
+    }
+
+    function updateMultiChoice(element, name, key, history){
+        var multi = document.getElementById(name);
+        var curVal = JSON.parse(multi.value);
+        curVal[key] = element.checked ? (history ? element.value : true) : (history ? null : false);
+        multi.value = JSON.stringify(curVal);
+    }
+
     
     function main() {
         //$('.option').attr('href', 'javascript:;')
