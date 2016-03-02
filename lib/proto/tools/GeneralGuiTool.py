@@ -29,7 +29,7 @@ class GeneralGuiTool(object):
         return False
 
     @staticmethod
-    def isRedirectTool():
+    def isRedirectTool(choices=None):
         return False
 
     @staticmethod
@@ -51,6 +51,10 @@ class GeneralGuiTool(object):
 
     @staticmethod
     def getInputBoxOrder():
+        return None
+
+    @staticmethod
+    def getInputBoxGroups(choices=None):
         return None
 
     @staticmethod
@@ -148,27 +152,27 @@ class GeneralGuiTool(object):
             logMessage('labels and choicesFormType are different:(labels=%i, choicesFormType=%i)' % (len(labels), len(choicesFormType)))
         return (testRunList, zip(labels, choicesFormType))
 
-    @classmethod
-    def _getPathAndUrlForFile(cls, galaxyFn, relFn):
-        '''
-        Gets a disk path and a URL for storing a run-specific file.
-        galaxyFn is connected to the resulting history item in Galaxy,
-          and is used to determine a unique disk path for this specific run.
-        relFn is a relative file name (i.e. only name, not full path) that one
-          wants a full disk path for, as well as a URL referring to the file.
-        '''
-        fullFn = cls._getDiskPathForFiles(galaxyFn) + os.sep + relFn
-        url = cls._getBaseUrlForFiles(fullFn)
-        return fullFn, url
-
-    @staticmethod
-    def _getDiskPathForFiles(galaxyFn):
-        galaxyId = extractIdFromGalaxyFn(galaxyFn)
-        return getUniqueWebPath(galaxyId)
-
-    @staticmethod
-    def _getBaseUrlForFiles(diskPath):
-        return getRelativeUrlFromWebPath(diskPath)
+    #@classmethod
+    #def _getPathAndUrlForFile(cls, galaxyFn, relFn):
+    #    '''
+    #    Gets a disk path and a URL for storing a run-specific file.
+    #    galaxyFn is connected to the resulting history item in Galaxy,
+    #      and is used to determine a unique disk path for this specific run.
+    #    relFn is a relative file name (i.e. only name, not full path) that one
+    #      wants a full disk path for, as well as a URL referring to the file.
+    #    '''
+    #    fullFn = cls._getDiskPathForFiles(galaxyFn) + os.sep + relFn
+    #    url = cls._getBaseUrlForFiles(fullFn)
+    #    return fullFn, url
+    #
+    #@staticmethod
+    #def _getDiskPathForFiles(galaxyFn):
+    #    galaxyId = extractIdFromGalaxyFn(galaxyFn)
+    #    return getUniqueWebPath(galaxyId)
+    #
+    #@staticmethod
+    #def _getBaseUrlForFiles(diskPath):
+    #    return getRelativeUrlFromWebPath(diskPath)
 
     @staticmethod
     def _getGenomeChoice(choices, genomeChoiceIndex):
@@ -380,59 +384,6 @@ class GeneralGuiTool(object):
         return outputFilename
 
 
-#+        new_primary_datasets = {}
-#+        try:
-#+            json_file = open( os.path.join( job_working_directory, jobs.TOOL_PROVIDED_JOB_METADATA_FILE ), 'r' )
-#+            for line in json_file:
-#+                line = simplejson.loads( line )
-#+                if line.get( 'type' ) == 'new_primary_dataset':
-#+                    new_primary_datasets[ os.path.split( line.get( 'filename' ) )[-1] ] = line
-#+        except Exception, e:
-#+            log.debug( "Error opening galaxy.json file: %s" % e )
-#         # Loop through output file names, looking for generated primary
-#         # datasets in form of:
-#         #     'primary_associatedWithDatasetID_designation_visibility_extension(_DBKEY)'
-#+        primary_datasets = {}
-#         for name, outdata in output.items():
-#             filenames = []
-#             if 'new_file_path' in self.app.config.collect_outputs_from:
-#@@ -2664,8 +2673,6 @@
-#                 primary_data.info = outdata.info
-#                 primary_data.init_meta( copy_from=outdata )
-#                 primary_data.dbkey = dbkey
-#-                primary_data.set_meta()
-#-                primary_data.set_peek()
-#                 # Associate new dataset with job
-#                 job = None
-#                 for assoc in outdata.creating_job_associations:
-#@@ -2677,6 +2684,15 @@
-#                     self.sa_session.add( assoc )
-#                     self.sa_session.flush()
-#                 primary_data.state = outdata.state
-#+                #add tool/metadata provided information
-#+                new_primary_datasets_attributes = new_primary_datasets.get( os.path.split( filename )[-1] )
-#+                if new_primary_datasets_attributes:
-#+                    dataset_att_by_name = dict( ext='extension' )
-#+                    for att_set in [ 'name', 'info', 'ext', 'dbkey' ]:
-#+                        dataset_att_name = dataset_att_by_name.get( att_set, att_set )
-#+                        setattr( primary_data, dataset_att_name, new_primary_datasets_attributes.get( att_set, getattr( primary_data, dataset_att_name ) ) )
-#+                primary_data.set_meta()
-#+                primary_data.set_peek()
-#                 self.sa_session.add( primary_data )
-#                 self.sa_session.flush()
-#                 outdata.history.add_dataset( primary_data )
-#
-#Repository URL: https://bitbucket.org/galaxy/galaxy-central/
-#
-#--
-#
-#This is a commit notification from bitbucket.org. You are receiving
-#this because you have the service enabled, addressing the recipient of
-#this email.
-#Previous message: [galaxy-commits] commit/galaxy-central: greg: Apply patch from Peter Cock which issues a warning if loading a loc file with inconsistent numbers of tabs.
-#Next message: [galaxy-commits] commit/galaxy-central: 2 new changesets
-#Messages sorted by: [ date ] [ thread ] [ subject ] [ author ]
-#More information about the galaxy-commits mailing list
 
 class MultiGeneralGuiTool(GeneralGuiTool):
     @staticmethod
@@ -442,6 +393,10 @@ class MultiGeneralGuiTool(GeneralGuiTool):
     @staticmethod
     def getToolSelectionName():
         return "-----  Select tool -----"
+
+    @staticmethod
+    def getSubToolSelectionTitle():
+        return 'Select subtool:'
 
     @staticmethod
     def validateAndReturnErrors(choices):
@@ -462,3 +417,7 @@ class HistElement(object):
         self.format = format
         self.label = label
         self.hidden = hidden
+
+
+BoxGroup = namedtuple('BoxGroup', ['label','first','last'])
+

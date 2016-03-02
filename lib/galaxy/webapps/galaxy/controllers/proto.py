@@ -29,6 +29,17 @@ class ProtoController( BaseUIController ):
 
     @staticmethod
     def __index_pipe(response, trans, tool):
+        # logging locks and/or atexit handlers may be cause of deadlocks in a fork from thread
+        # attempt to fix by shutting down and reloading logging module and clear exit handlers
+        #logging.shutdown()
+        import atexit
+        #for handler in atexit._exithandlers:
+        #    print repr(handler)
+        #    handler[0]()
+        atexit._exithandlers = []
+        reload(logging)
+        #log.warning('fork log test')
+        
         exc_info = None
         html = ''
         try:
@@ -56,54 +67,19 @@ class ProtoController( BaseUIController ):
         response.send_bytes(html)
         response.close()
 
-    #@staticmethod
-    #def __index_shm(response, trans, tool):
-    #    exc_info = None
-    #    html = ''
-    #    try:
-    #        #print 'forked index'
-    #        from gold.application.GalaxyInterface import GalaxyInterface
-    #        template_mako = '/hyperbrowser/' + tool + '.mako'
-    #        toolController = None
-    #        try:
-    #            toolModule = __import__('hyperbrowser.' + tool, globals(), locals(), ['getController'])
-    #            #reload(toolModule)
-    #            toolController = toolModule.getController(trans)
-    #        except Exception, e:
-    #            print e
-    #            exc_info = sys.exc_info()
-    #            pass
-    #        
-    #        html = trans.fill_template(template_mako, trans=trans, hyper=GalaxyInterface, control=toolController)
-    #        response.value = html
-    #    except Exception, e:
-    #        response.value = '<html><body><pre>\n'
-    #        if exc_info:
-    #            response.value += str(e) + ':\n' + ''.join(traceback.format_exception(exc_info[0],exc_info[1],exc_info[2])) + '\n\n'
-    #        response.value += str(e) + ':\n' + traceback.format_exc() + '\n</pre></body></html>'
-
-    #@staticmethod
-    #def __json(response, trans, module, kwd):
-    #    try:
-    #        toolController = None
-    #        toolModule = __import__('hyperbrowser.' + module, globals(), locals(), ['getController'])
-    #        toolController = toolModule.getController(trans)            
-    #        response.put(toolController.jsonCall(kwd))
-    #    except Exception, e:
-    #        response.put({'exception': str(e), 'backtrace': traceback.format_exc()})
 
     @web.expose
     def index(self, trans, mako = 'generictool', **kwd):
         if kwd.has_key('rerun_hda_id'):
             self._import_job_params(trans, kwd['rerun_hda_id'])
                     
-        my_end, your_end = Pipe()
         if isinstance(mako, list):
             mako = mako[0]
         
         trans.sa_session.flush()
         trans.sa_session.close()
 
+        my_end, your_end = Pipe()
         proc = Process(target=self.__index_pipe, args=(your_end,trans,str(mako)))
         proc.start()
         html = ''
@@ -121,23 +97,6 @@ class ProtoController( BaseUIController ):
             log.warn('fork did not exit, terminated.')
         return html
 
-    #@web.expose
-    #def index_shm(self, trans, mako = 'analyze', **kwd):
-    #    if kwd.has_key('rerun_hda_id'):
-    #        self._import_job_params(trans, kwd['rerun_hda_id'])
-    #                
-    #    response = Array('c', 20 * 1048576, lock=True)
-    #    if isinstance(mako, list):
-    #        mako = mako[0]
-    #    proc = Process(target=self.__index_shm, args=(response,trans,str(mako)))
-    #    proc.start()
-    #    proc.join(120)
-    #    if proc.is_alive():
-    #        proc.terminate()
-    #        print 'fork did not join in 120 sec, terminated.'
-    #    html = response.value
-    #    response = None
-    #    return html
 
     @web.json
     def json(self, trans, module = None, **kwd):
@@ -165,9 +124,6 @@ class ProtoController( BaseUIController ):
         
         return rval
 
-#    @web.expose
-#    def import_result(self, trans, **kwd):
-#        return 'OK'
 
     def _import_job_params(self, trans, id=None):
         """

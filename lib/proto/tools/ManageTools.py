@@ -42,6 +42,7 @@ class GalaxyToolConfig:
         return section_names
     
     def addTool(self, section_name, tool_file):
+        self.getSections()
         tool_tag = '\n\t<tool file="%s" />' % (tool_file,)
         pos = self.sectionPos[section_name]
         self.tool_conf_data = self.tool_conf_data[:pos] + tool_tag + self.tool_conf_data[pos:]
@@ -81,7 +82,13 @@ def getProtoToolList(except_class_names=[]):
                             prototype_cls = getattr(module, class_name)
                             if issubclass(prototype_cls, GeneralGuiTool) and not issubclass(prototype_cls, MultiGeneralGuiTool) and hasattr(prototype_cls, 'getToolName'):
                                 prototype = prototype_cls('hb_no_tool_id_yet')
-                                tools[class_name] = (fn, m.group(2), prototype_cls, module_name)
+                                toolModule = module_name.split('.')[2:]
+                                if class_name != toolModule[-1]:
+                                    toolSelectionName = '.'.join(toolModule) + ' [' + class_name + ']'
+                                else:
+                                    toolSelectionName = '.'.join(toolModule)
+
+                                tools[toolSelectionName] = (fn, m.group(2), prototype_cls, module_name)
                                 tool_classes.append(prototype_cls)
                         except Exception as e:
                             traceback.print_exc()
@@ -112,10 +119,10 @@ class ExploreToolsTool(MultiGeneralGuiTool):
     @classmethod
     def getSubToolClasses(cls):
         tool_shelve = shelve.open(TOOL_SHELVE, 'r')
-        installed_classes = [tool_shelve.get(t)[1] for t in tool_shelve.keys()]
+        installed_classes = [tool_shelve.get(t)[1] for t in tool_shelve.keys() if os.path.exists(os.path.join(SOURCE_CODE_BASE_DIR, tool_shelve.get(t)[0].replace('.', os.path.sep)) + '.py') ]                
         tool_shelve.close()
         tool_list = getProtoToolList(installed_classes)[1]
-        return sorted(tool_list, key=lambda c: c.__name__)
+        return sorted(tool_list, key=lambda c: c.__module__)
 
 
 
@@ -155,6 +162,23 @@ class ExploreToolsTool(MultiGeneralGuiTool):
 class InstallToolsTool(GeneralGuiTool):
     prototype = None
 
+    @classmethod
+    def _getToolList(cls):
+        tool_shelve = shelve.open(TOOL_SHELVE, 'r')
+        tool_IDs = set(tool_shelve.keys())
+        installed_classes = [tool_shelve.get(t)[1] for t in tool_IDs]
+        tool_shelve.close()
+        return getProtoToolList(installed_classes)[0]
+
+    @classmethod
+    def _getProtoType(cls, tool):
+        try:
+            prototype = cls._getToolList()[tool][2]()
+        except:
+            prototype = None
+        return prototype
+
+
     @staticmethod
     def getToolName():
         return "ProTo tool installer"
@@ -181,25 +205,21 @@ class InstallToolsTool(GeneralGuiTool):
 
     @classmethod
     def getOptionsBoxTool(cls):
-        tool_shelve = shelve.open(TOOL_SHELVE, 'r')
-        cls.tool_IDs = set(tool_shelve.keys())
-        installed_classes = [tool_shelve.get(t)[1] for t in cls.tool_IDs]
-        tool_shelve.close()
-        cls.tool_list = getProtoToolList(installed_classes)[0]
-        return ['-- Select tool --'] + sorted(cls.tool_list)
+        tool_list = cls._getToolList()
+        return ['-- Select tool --'] + sorted(tool_list)
 
     @classmethod
     def getOptionsBoxToolID(cls, prevchoices):
         if prevchoices.tool is None or prevchoices.tool.startswith('--'):
-            cls.prototype = None
             return ''
-        cls.prototype = cls.tool_list[prevchoices.tool][2]()
-        return 'ProTo_' + prevchoices.tool
+        tool_list = cls._getToolList()
+        return 'ProTo_' + tool_list[prevchoices.tool][2].__name__
 
     @classmethod
     def getOptionsBoxName(cls, prevchoices):
-        if cls.prototype is not None:
-            return cls.prototype.getToolName()
+        prototype = cls._getProtoType(prevchoices.tool)
+        if prototype is not None:
+            return prototype.getToolName()
 
     @classmethod
     def getOptionsBoxDescription(cls, prevchoices):
@@ -207,13 +227,16 @@ class InstallToolsTool(GeneralGuiTool):
 
     @classmethod
     def getOptionsBoxToolXMLPath(cls, prevchoices):
-        if cls.prototype is not None:
-            return 'proto/' + prevchoices.tool + '.xml'
+        prototype = cls._getProtoType(prevchoices.tool)
+        if prototype is not None:
+            package = prototype.__module__.split('.')
+            package_dir = '/'.join(package[2:-1]) + '/' if len(package) > 3 else ''
+            return 'proto/' + package_dir + prototype.__class__.__name__ + '.xml'
 
     @classmethod
     def getOptionsBoxSection(cls, prevchoices):
-        cls.toolConf = GalaxyToolConfig()
-        return cls.toolConf.getSections()
+        toolConf = GalaxyToolConfig()
+        return toolConf.getSections()
         
     #@classmethod
     #def getOptionsBoxInfo(cls, prevchoices):
@@ -232,10 +255,6 @@ class InstallToolsTool(GeneralGuiTool):
     def validateAndReturnErrors(cls, choices):
         if not choices.toolID or len(choices.toolID) < 6 or not re.match(r'^[a-zA-Z0-9_]+$', choices.toolID):
             return 'Tool ID must be at least 6 characters and not contain special chars'
-#        if choices.toolID in cls.tool_IDs:
-#            return 'Tool ID is not unique'
-#        if os.path.exists(GALAXY_TOOL_XML_PATH + choices.toolXMLPath):
-#            return 'Tool XML file already exists'
         return None
         
     @classmethod
@@ -244,11 +263,11 @@ class InstallToolsTool(GeneralGuiTool):
         if choices.tool and choices.section:
             txt = 'Install %s into %s' % (choices.tool, choices.section)
         tool_cls = choices.tool
-        prototype = cls.prototype
-        #tool_file = TOOL_XML_REL_PATH + tool_cls + '.xml'
+        prototype = cls._getProtoType(choices.tool)
         tool_file = choices.toolXMLPath
-        xml = cls.toolConf.addTool(choices.section, tool_file)
-        tool_xml = cls.toolConf.createToolXml(tool_file, choices.toolID, choices.name, prototype.__module__, prototype.__class__.__name__, choices.description)
+        toolConf = GalaxyToolConfig()
+        xml = toolConf.addTool(choices.section, tool_file)
+        tool_xml = toolConf.createToolXml(tool_file, choices.toolID, choices.name, prototype.__module__, prototype.__class__.__name__, choices.description)
         
         abs_tool_xml_path = GALAXY_TOOL_XML_PATH + choices.toolXMLPath
         try:
@@ -258,7 +277,7 @@ class InstallToolsTool(GeneralGuiTool):
         with open(abs_tool_xml_path, 'w') as tf:
             tf.write(tool_xml)
         
-        cls.toolConf.write()
+        toolConf.write()
         
         print '<pre>' + escape(xml) + '</pre>' + '<pre>' + escape(tool_xml) + '</pre>'
         
@@ -303,13 +322,16 @@ class GenerateToolsTool(GeneralGuiTool):
     
     @staticmethod
     def execute(choices, galaxyFn=None, username=''):
-        packageDir = PROTO_TOOL_DIR + choices.packageName
-        if not os.path.exists(packageDir + '/__init__.py'):
-            try:
-                os.makedirs(packageDir)
-            except:
-                pass
-            open(packageDir + '/__init__.py', 'a').close()
+        packagePath = choices.packageName.split('.')
+        packageDir = PROTO_TOOL_DIR + '/'.join(packagePath)
+        if not os.path.exists(packageDir):
+            os.makedirs(packageDir)
+
+        for i in range(len(packagePath)):
+            init_py = PROTO_TOOL_DIR + '/'.join(packagePath[0:i+1]) + '/__init__.py'
+            if not os.path.exists(init_py):
+                print 'creating ', init_py
+                open(init_py, 'a').close()
             
         pyname = packageDir + '/' + choices.moduleName + '.py'
         

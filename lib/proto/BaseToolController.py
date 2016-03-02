@@ -41,11 +41,11 @@ class BaseToolController(object):
             self.params['tool_id'] = self.params['tool_name']
 
     def action(self):
-        'to be called from mako'
+        'is called from web-request'
         pass
 
     def execute(self):
-        'to be called from job-script'
+        'is called from job-runner'
         pass
 
     def stdoutToHistory(self):
@@ -62,12 +62,18 @@ class BaseToolController(object):
 
     def userIsOneOfUs(self):
         return Config.userHasFullAccess(self.galaxy.getUserName())
+
+    def _getGalaxyGenomes(self):
+        #from galaxy.tools.parameters.basic import GenomeBuildParameter
+        #return GenomeBuildParameter().get_legal_values()
+        return [(gb[1], gb[0], False) for gb in self.transaction.app.genome_builds.get_genome_build_names()]
     
     def _getAllGenomes(self):
-        return [('----- Select -----', '', False)] + GalaxyInterface.getAllGenomes(self.galaxy.getUserName())
+        #return [('----- Select -----', '', False)] + GalaxyInterface.getAllGenomes(self.galaxy.getUserName())
+        return [('----- Select -----', '', False)] + self._getGalaxyGenomes()
         
-    def getGenomeElement(self):    
-        return SelectElement('dbkey', self._getAllGenomes(), self.getGenome())
+    def getGenomeElement(self, id='dbkey', genomeList = None):    
+        return SelectElement(id, self._getAllGenomes() if genomeList is None else genomeList, self.getGenome())
 
     def getGenome(self, id='dbkey'):
         if self.transaction.request.POST.has_key('dbkey'):
@@ -79,12 +85,13 @@ class BaseToolController(object):
             return self.params.get('dbkey')
         elif self.params.has_key(id):
             self.params['dbkey'] = self.params.get(id)
-        return self.params.get('dbkey', self._getAllGenomes()[0][1])
+#        return self.params.get('dbkey', self._getAllGenomes()[0][1])
+        return self.params.get('dbkey')
 
     def getDictOfAllGenomes(self):
-        return OrderedDict([(x[0],False) for x in GalaxyInterface.getAllGenomes(self.galaxy.getUserName())])
+        return OrderedDict([(x[0],False) for x in self._getAllGenomes()[1:]])
         
-    def getTrackElement(self, id, label, history=False, ucsc=False):
+    def getTrackElement(self, id, label, history=False, ucsc=False, tracks=None):
         datasets = []
         if history:
             try:
@@ -92,7 +99,10 @@ class BaseToolController(object):
             except Exception, e:
                 print e
         element = TrackWrapper(id, GalaxyInterface, [], self.galaxy, datasets, self.getGenome(), ucscTracks=ucsc)
-        element.fetchTracks()
+        if tracks is not None:
+            element.tracks = tracks
+        else:
+            element.fetchTracks()
         element.legend = label
         return element
 
