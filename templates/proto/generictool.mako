@@ -67,6 +67,12 @@ else:
     %endif
 
     %for i in control.inputOrder:
+        %if i in control.inputGroup[0]:
+            %for label in control.inputGroup[0][i]:
+            <fieldset><legend>${label}</legend>
+            %endfor
+        %endif
+    
         %if control.inputTypes[i] == 'select':
             ${functions.select(control.inputIds[i], control.options[i], control.displayValues[i], control.inputNames[i], info=control.inputInfo[i])}
         %elif control.inputTypes[i] == 'multi':
@@ -96,7 +102,13 @@ else:
         %elif control.inputTypes[i] == 'table':
             ${control.displayValues[i]}
         %endif
-        
+
+        %if i in control.inputGroup[1]:
+            %for j in range(0, control.inputGroup[1].count(i)):
+            </fieldset>
+            %endfor
+        %endif
+
     %endfor
     
     <p><input id="start" type="submit" name="start" value="Execute" ${'disabled' if not control.isValid() else ''}></p>

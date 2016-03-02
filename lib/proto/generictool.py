@@ -20,7 +20,7 @@ import sys, os, json, shelve
 import cPickle as pickle
 from zlib import compress, decompress
 from base64 import urlsafe_b64decode, urlsafe_b64encode
-from collections import namedtuple, OrderedDict
+from collections import namedtuple, OrderedDict, defaultdict
 from urllib import quote, unquote
 #from gold.application.GalaxyInterface import GalaxyInterface
 #from quick.webtools.GeneralGuiToolsFactory import GeneralGuiToolsFactory
@@ -31,12 +31,13 @@ from config.Config import URL_PREFIX, GALAXY_BASE_DIR
 #from gold.application.LogSetup import usageAndErrorLogging
 #from gold.util.CommonFunctions import getClassName
 from BaseToolController import BaseToolController
+from proto.OptionsBoxes import OptionsBoxClassList
+
 
 def getClassName(obj):
     return obj.__class__.__name__
 
 class GenericToolController(BaseToolController):
-    initChoicesDict = None
 
     def __init__(self, trans, job):
         BaseToolController.__init__(self, trans, job)
@@ -105,7 +106,7 @@ class GenericToolController(BaseToolController):
         self._getInputBoxNames()
         self.inputOrder = self._getIdxList(self.prototype.getInputBoxOrder())
         self.resetBoxes = self._getIdxList(self.prototype.getResetBoxes())
-
+        
         self.trackElements = {}
         self.extra_output = []
 
@@ -113,6 +114,7 @@ class GenericToolController(BaseToolController):
         self._initCache()
         if trans:
             self.action()
+            self.inputGroup = self._getInputGroup(self.prototype.getInputBoxGroups(self.choices))
             if hasattr(self.prototype, 'getExtraHistElements'):
                 extra_output = self.prototype.getExtraHistElements(self.choices)
                 if extra_output:
@@ -123,6 +125,16 @@ class GenericToolController(BaseToolController):
                             self.extra_output.append(e)
 
 
+    def _getInputGroup(self, inputBoxGroups):
+        startGroupInfo = defaultdict(list)
+        endIdxs = list()
+        if inputBoxGroups:
+            for group in inputBoxGroups:
+                idxBegin = self._getIdxForBoxId(group[1])
+                idxEnd = self._getIdxForBoxId(group[2])
+                startGroupInfo[idxBegin].append(group[0])
+                endIdxs.append(idxEnd)
+        return startGroupInfo, endIdxs
 
     def _getInputBoxNames(self):
         names = self.prototype.getInputBoxNames()
@@ -142,19 +154,33 @@ class GenericToolController(BaseToolController):
             idxList = range(len(self.inputIds))
         else:
             for i in inputList:
-                if isinstance(i, str):
-                    try:
-                        idx = self.inputIds.index(i)
-                    except ValueError:
-                        if i.startswith('box'):
-                            idx = int(i[3:]) - 1
-                else:
-                    idx = i - 1
+                #if isinstance(i, str):
+                #    try:
+                #        idx = self.inputIds.index(i)
+                #    except ValueError:
+                #        if i.startswith('box'):
+                #            idx = int(i[3:]) - 1
+                #else:
+                #    idx = i - 1
+                idx = self._getIdxForBoxId(i)
                 if idx < len(self.inputIds):
                     idxList.append(idx)
                 else:
                     raise IndexError('List index out of range: %d >= %d' % (idx, len(self.inputIds)))
         return idxList
+
+    
+    def _getIdxForBoxId(self, i):
+        if isinstance(i, str):
+            try:
+                idx = self.inputIds.index(i)
+            except ValueError:
+                if i.startswith('box'):
+                    idx = int(i[3:]) - 1
+        else:
+            idx = i - 1
+        return idx
+
 
     def _getOptionsBox(self, i, val = None):
         id = self.inputIds[i]
@@ -245,161 +271,184 @@ class GenericToolController(BaseToolController):
         for i in range(len(self.inputNames)):
             name = self.inputNames[i]
             id = self.inputIds[i]
-            if self.initChoicesDict:
-                val = self.initChoicesDict[id]
-            else:
-                val = self.params.get(id)
+            val = self.params.get(id)
                 
             display_only = False
             opts = self.getOptionsBox(id, i, val)
 
-            if reset and not self.initChoicesDict:
+            if reset:
                 val = None
 
-            if opts == None:
-                self.inputTypes += [None]
-                val = None
 
-            elif isinstance(opts, dict) or opts == '__genomes__':
-                self.inputTypes += ['multi']
-                if opts == '__genomes__':
-                    try:
-                        opts = self.cachedExtra[id]
-                    except:
-                        opts = self.getDictOfAllGenomes()
-                        self.cachedExtra[id] = opts
-                if not self.initChoicesDict:
+            box = None
+            if True and opts is not None:
+                for Box in OptionsBoxClassList:
+                
+                   if isinstance(opts, Box):
+                       box = opts
+                       break
+                   elif Box.isTypeOf(opts):
+                       box = Box.construct(opts)
+                       break
+                
+                if box is not None:
+                    box.process(self, id, val)
+                    val = box.getValue()
+                    self.inputTypes += [box.getType()]
+                    opts = box.getOptions()
+                    print box.getType(), val, opts
+                   #self.inputBoxes.append(box)
+                
+                   #    self.inputValues += [value]
+                   #self.options.append(box.getOptions())
+
+
+
+            if box is None:
+                if opts is None:
+                    self.inputTypes += [None]
+                    val = None
+    
+    
+                elif isinstance(opts, dict) or opts == '__genomes__':
+                    self.inputTypes += ['multi']
+                    if opts == '__genomes__':
+                        try:
+                            opts = self.cachedExtra[id]
+                        except:
+                            opts = self.getDictOfAllGenomes()
+                            self.cachedExtra[id] = opts
                     values = type(opts)()
                     for k,v in opts.items():
-                        #values[k] = bool(self.params.get(id + '|' + k, False if val else v))
                         values[k] = bool(self.params.get(id + '|' + k , False) if val else v)
                     val = values
-
-            elif isinstance(opts, str) or isinstance(opts, unicode):
-                if opts == '__genome__':
-                    self.inputTypes += ['__genome__']
-                    try:
-                        genomeCache = self.getCacheData(id)
-                    except Exception as e:
-                        print 'genome cache error', e
-                        genomeCache = self._getAllGenomes()
-                        self.putCacheData(id, genomeCache)
-                        
-                    opts = self.getGenomeElement(id, genomeCache)
-                    val = self.getGenome(id)
-
-                elif opts == '__track__':
-                    self.inputTypes += ['__track__']
-                    try:
-                        #assert False
-                        cachedTracks = self.getCacheData(id)
-                        track = self.getTrackElement(id, name, tracks=cachedTracks)
-                    except:
-                        print 'track cache fail'
-                        track = self.getTrackElement(id, name)
-                        self.putCacheData(id, track.tracks)
-                    self.trackElements[id] = track
-                    tn = track.definition(False)
-                    GalaxyInterface.cleanUpTrackName(tn)
-                    val = ':'.join(tn)
-                    #val = track.asString()
-
-                elif opts == '__password__':
-                    self.inputTypes += ['__password__']
-                    if val == None:
-                        val = ''
-
-                else:
-                    self.inputTypes += ['text']
-                    if val == None:
-                        val = opts
-                    opts = (val, 1, False)
-
-            elif isinstance(opts, tuple):
-                if opts[0] == '__history__':
-                    self.inputTypes += opts[:1]
-                    opts = self.galaxy.optionsFromHistoryFn(exts = opts[1:] if len(opts)>1 else None, select = val)
-                    if val == None and opts and len(opts[1]) > 0:
-                        val = opts[1][0]
-                    #opts = self.galaxy.getHistory(GalaxyInterface.getSupportedGalaxyFileFormats())
-                elif opts[0] == '__toolhistory__':
-                    self.inputTypes += opts[:1]
-                    opts = self.galaxy.optionsFromHistoryFn(tools = opts[1:] if len(opts)>1 else None, select = val)
-                    if val == None and opts and len(opts[1]) > 0:
-                        val = opts[1][0]
-                elif opts[0] == '__multihistory__':
-                    self.inputTypes += opts[:1]
-                    opts = self.galaxy.itemsFromHistoryFn(opts[1:] if len(opts)>1 else None)
-                    if not self.initChoicesDict:
+    
+    
+    
+                elif isinstance(opts, str) or isinstance(opts, unicode):
+                    if opts == '__genome__':
+                        self.inputTypes += ['__genome__']
+                        try:
+                            genomeCache = self.getCacheData(id)
+                        except Exception as e:
+                            print 'genome cache error', e
+                            genomeCache = self._getAllGenomes()
+                            self.putCacheData(id, genomeCache)
+                            
+                        opts = self.getGenomeElement(id, genomeCache)
+                        val = self.getGenome(id)
+    
+                    elif opts == '__track__':
+                        self.inputTypes += ['__track__']
+                        try:
+                            #assert False
+                            cachedTracks = self.getCacheData(id)
+                            track = self.getTrackElement(id, name, tracks=cachedTracks)
+                        except:
+                            print 'track cache fail'
+                            track = self.getTrackElement(id, name)
+                            self.putCacheData(id, track.tracks)
+                        self.trackElements[id] = track
+                        tn = track.definition(False)
+                        GalaxyInterface.cleanUpTrackName(tn)
+                        val = ':'.join(tn)
+                        #val = track.asString()
+    
+                    #elif opts == '__password__':
+                    #    self.inputTypes += ['__password__']
+                    #    if val == None:
+                    #        val = ''
+    
+                    #else:
+                    #    self.inputTypes += ['text']
+                    #    if val == None:
+                    #        val = opts
+                    #    opts = (val, 1, False)
+    
+                elif isinstance(opts, tuple):
+                    if opts[0] == '__history__':
+                        self.inputTypes += opts[:1]
+                        opts = self.galaxy.optionsFromHistoryFn(exts = opts[1:] if len(opts)>1 else None, select = val)
+                        if val == None and opts and len(opts[1]) > 0:
+                            val = opts[1][0]
+                        #opts = self.galaxy.getHistory(GalaxyInterface.getSupportedGalaxyFileFormats())
+                    elif opts[0] == '__toolhistory__':
+                        self.inputTypes += opts[:1]
+                        opts = self.galaxy.optionsFromHistoryFn(tools = opts[1:] if len(opts)>1 else None, select = val)
+                        if val == None and opts and len(opts[1]) > 0:
+                            val = opts[1][0]
+                    elif opts[0] == '__multihistory__':
+                        self.inputTypes += opts[:1]
+                        opts = self.galaxy.itemsFromHistoryFn(opts[1:] if len(opts)>1 else None)
                         values = OrderedDict()
                         for k,v in opts.items():
                             itemval = self.params.get(id + '|' + k, None)
                             #if itemval:
                             values[str(k)] = itemval
-
+    
                         val = values
-
-                elif opts[0] == '__track__':
-                    self.inputTypes += ['__track__']
-                    track = self.getTrackElement(id, name, True if 'history' in opts else False, True if 'ucsc' in opts else False)
-                    self.trackElements[id] = track
-                    tn = track.definition(False)
-                    GalaxyInterface.cleanUpTrackName(tn)
-                    val = ':'.join(tn)
-                    #val = track.asString()
-
-                elif opts[0] == '__hidden__':
-                    self.inputTypes += opts[:1]
-                    if opts[1] != None:
-                        val = opts[1]
-                    #elif val:
-                    #    val = unquote(val)
-                elif len(opts) in [2, 3] and (isinstance(opts[0], str) or isinstance(opts[0], unicode)):
-                    if len(opts) == 2:
-                        opts = opts + (False,)
-                    if isinstance(opts[1], int):
-                        if isinstance(opts[2], bool):
-                            if opts[2]:
-                                self.inputTypes += ['text_readonly']
-                                val = opts[0]
-                                #display_only = True
-                            else:
-                                self.inputTypes += ['text']
-                                if val == None:
-                                    val = opts[0]
+    
+                    elif opts[0] == '__track__':
+                        self.inputTypes += ['__track__']
+                        track = self.getTrackElement(id, name, True if 'history' in opts else False, True if 'ucsc' in opts else False)
+                        self.trackElements[id] = track
+                        tn = track.definition(False)
+                        GalaxyInterface.cleanUpTrackName(tn)
+                        val = ':'.join(tn)
+                        #val = track.asString()
+    
+                    #elif opts[0] == '__hidden__':
+                    #    self.inputTypes += opts[:1]
+                    #    if opts[1] != None:
+                    #        val = opts[1]
+                        #elif val:
+                        #    val = unquote(val)
+                    #elif len(opts) in [2, 3] and (isinstance(opts[0], str) or isinstance(opts[0], unicode)):
+                    #    if len(opts) == 2:
+                    #        opts = opts + (False,)
+                    #    if isinstance(opts[1], int):
+                    #        if isinstance(opts[2], bool):
+                    #            if opts[2]:
+                    #                self.inputTypes += ['text_readonly']
+                    #                val = opts[0]
+                    #                #display_only = True
+                    #            else:
+                    #                self.inputTypes += ['text']
+                    #                if val == None:
+                    #                    val = opts[0]
+                    #    else:
+                    #        self.inputTypes += ['rawStr']
+                    #        val = opts[1]
+                    #        display_only = True
                     else:
-                        self.inputTypes += ['rawStr']
-                        val = opts[1]
+                        self.inputTypes += [None]
+                        val = None
+    
+                elif isinstance(opts, list):
+                    if len(opts) > 0 and isinstance(opts[0], list):
+                        self.inputTypes += ['table']
+                        core = HtmlCore()
+                        core.tableHeader(opts[0], sortable=True)
+                        if len(opts) > 1:
+                            for r in range(1, len(opts)):
+                                core.tableLine(opts[r])
+                        core.tableFooter()
+                        val = str(core)
                         display_only = True
-                else:
-                    self.inputTypes += [None]
-                    val = None
-
-            elif isinstance(opts, list):
-                if len(opts) > 0 and isinstance(opts[0], list):
-                    self.inputTypes += ['table']
-                    core = HtmlCore()
-                    core.tableHeader(opts[0], sortable=True)
-                    if len(opts) > 1:
-                        for r in range(1, len(opts)):
-                            core.tableLine(opts[r])
-                    core.tableFooter()
-                    val = str(core)
-                    display_only = True
-
-                else:
-                    self.inputTypes += ['select']
-                    if len(opts) > 0 and (val == None or val not in opts):
-                        val = opts[0]
-
-            elif isinstance(opts, bool):
-                self.inputTypes += ['checkbox']
-                val = True if val == "True" else opts if self.use_default else False
-
-            #elif isinstance(opts, list) and len(opts) == 0:
-            #    self.inputTypes += ['text']
-            #    if val == None:
-            #        val = ''
+    
+                    else:
+                        self.inputTypes += ['select']
+                        if len(opts) > 0 and (val == None or val not in opts):
+                            val = opts[0]
+    
+                #elif isinstance(opts, bool):
+                #    self.inputTypes += ['checkbox']
+                #    val = True if val == "True" else opts if self.use_default else False
+    
+                #elif isinstance(opts, list) and len(opts) == 0:
+                #    self.inputTypes += ['text']
+                #    if val == None:
+                #        val = ''
 
             self.displayValues.append(val if isinstance(val, basestring) else repr(val))
             self.inputValues.append(None if display_only else val)
