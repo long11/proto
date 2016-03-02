@@ -60,14 +60,14 @@ def extractIdFromGalaxyFn(fn):
 
     '/path/to/001/dataset_00123_files/myfile/myfile.bed' -> ['001', '00123', 'myfile']
 
-    For temporary Galaxy files:
-
-    /path/to/tmp/primary_49165_wgEncodeUmassDekker5CEnmPrimer.doc.tgz_visible_.doc.tgz
-
     Also, if the input is a run-specific file, the history and batch ID, is also extracted, e.g.:
 
     '/path/to/dev2/001/00123/0/somefile.bed' -> ['001', '00123', '0']
     '''
+    #'''For temporary Galaxy files:
+    #
+    #/path/to/tmp/primary_49165_wgEncodeUmassDekker5CEnmPrimer.doc.tgz_visible_.doc.tgz -> '49165'
+    #'''
 
     pathParts = fn.split(os.sep)
     assert len(pathParts) >= 2, pathParts
@@ -87,10 +87,10 @@ def extractIdFromGalaxyFn(fn):
             else:
                 extraIds = [part] + extraIds
         id = [id1, id2] + extraIds
-    elif os.path.basename(fn).startswith('primary'):
-        basenameParts = os.path.basename(fn).split('_')
-        assert len(basenameParts) >= 2
-        id = basenameParts[1]
+    #elif os.path.basename(fn).startswith('primary'):
+    #    basenameParts = os.path.basename(fn).split('_')
+    #    assert len(basenameParts) >= 2
+    #    id = basenameParts[1] # id does not make sense. Removed for now, revise if needed.
     else: #For run-specific files
         for i in range(len(pathParts)-2, 0, -1):
             if not pathParts[i].isdigit():
@@ -118,33 +118,39 @@ def galaxySecureDecodeId(encodedId):
     from config.Config import GALAXY_SECURITY_HELPER_OBJ
     return GALAXY_SECURITY_HELPER_OBJ.decode_id(encodedId)
 
-def getGalaxyFnFromDatasetId(num):
-    from config.Config import GALAXY_FILE_PATH
-    id1, id2 = createFullGalaxyIdFromNumber(num)
-    return os.path.join(GALAXY_FILE_PATH, id1, 'dataset_%s.dat' % id2)
+def getEncodedDatasetIdFromPlainGalaxyId(plainId):
+    return galaxySecureEncodeId(plainId)
 
-def _galaxyGetSecurityHelper():
-    from galaxy.web.security import SecurityHelper
-    from config.Config import getUniverseConfigParser, getFromConfig
+def getEncodedDatasetIdFromGalaxyFn(cls, galaxyFn):
+    plainId = extractIdFromGalaxyFn(galaxyFn)[1]
+    return getEncodedDatasetIdFromPlainGalaxyId(plainId)
 
-    config = getUniverseConfigParser()
-    id_secret = getFromConfig(config, 'id_secret', 'USING THE DEFAULT IS NOT SECURE!')
-    return SecurityHelper(id_secret=id_secret)
+def getGalaxyFnFromEncodedDatasetId(encodedId):
+    plainId = galaxySecureDecodeId(encodedId)
+    return getGalaxyFnFromDatasetId(plainId)
 
-def galaxySecureEncodeId(plainId):
-    secHelper = _galaxyGetSecurityHelper()
-    return secHelper.encode_id(plainId)
+def getGalaxyFilesDir(galaxyFn):
+    return galaxyFn[:-4] + '_files'
 
-def galaxySecureDecodeId(encodedId):
-    secHelper = _galaxyGetSecurityHelper()
-    return secHelper.decode_id(encodedId)
+    '''
+    id is the relative file hierarchy, encoded as a list of strings
+    '''
+def getGalaxyFilesFilename(galaxyFn, id):
+    return os.path.sep.join([getGalaxyFilesDir(galaxyFn)] + id)
 
-def getUniqueRunSpecificId(id=[]):
-    return ['run_specific'] + id
+def getGalaxyFilesFnFromEncodedDatasetId(encodedId):
+    galaxyFn = getGalaxyFnFromEncodedDatasetId(encodedId)
+    return getGalaxyFilesDir(galaxyFn)
 
-def getUniqueWebPath(id=[]):
-    from config.Config import STATIC_PATH
-    return os.sep.join([STATIC_PATH] + getUniqueRunSpecificId(id))
+def createGalaxyFilesFn(galaxyFn, filename):
+    return os.path.sep.join([getGalaxyFilesDir(galaxyFn), filename])
+
+#def getUniqueRunSpecificId(id=[]):
+#    return ['run_specific'] + id
+#
+#def getUniqueWebPath(id=[]):
+#    from config.Config import STATIC_PATH
+#    return os.sep.join([STATIC_PATH] + getUniqueRunSpecificId(id))
 
 def getLoadToGalaxyHistoryURL(fn, genome='hg18', galaxyDataType='bed', urlPrefix=None):
     if urlPrefix is None:
@@ -158,9 +164,10 @@ def getLoadToGalaxyHistoryURL(fn, genome='hg18', galaxyDataType='bed', urlPrefix
     return urlPrefix + '/tool_runner?tool_id=file_import_%s&dbkey=%s&runtool_btn=yes&input=' % (galaxyDataType, genome) \
             + base64.urlsafe_b64encode(fn) + ('&datatype='+galaxyDataType if galaxyDataType is not None else '')
 
-def getRelativeUrlFromWebPath(webPath):
-    from config.Config import GALAXY_BASE_DIR, URL_PREFIX
-    return URL_PREFIX + webPath[len(GALAXY_BASE_DIR):]
+#def getRelativeUrlFromWebPath(webPath):
+#    from config.Config import GALAXY_BASE_DIR, URL_PREFIX
+#    if webPath.startswith(GALAXY_BASE_DIR):
+#        return URL_PREFIX + webPath[len(GALAXY_BASE_DIR):]
 
 def isFlatList(list):
     for l in list:
