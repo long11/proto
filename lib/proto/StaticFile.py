@@ -1,5 +1,5 @@
-from proto.config.Config import GALAXY_FILE_PATH, GALAXY_URL
-from proto.CommonFunctions import ensurePathExists, getUniqueRunSpecificId, getLoadToGalaxyHistoryURL, galaxySecureEncodeId
+from proto.config.Config import STATIC_PATH, STATIC_REL_PATH, GALAXY_FILE_PATH
+from proto.CommonFunctions import ensurePathExists, getUniqueRunSpecificId, getLoadToGalaxyHistoryURL
 from proto.HtmlCore import HtmlCore
 import os
 #from quick.application.SignatureDevianceLogging import takes,returns
@@ -11,7 +11,7 @@ class StaticFile(object):
         self._id = id
 
     def getDiskPath(self, ensurePath=False):
-        fn = os.sep.join( [GALAXY_FILE_PATH] + [self._id[1], 'dataset_'+self._id[2]+'_files'] + self._id[3:])
+        fn = os.sep.join([STATIC_PATH] + self._id)
         if ensurePath:
             ensurePathExists(fn)
         return fn
@@ -29,11 +29,14 @@ class StaticFile(object):
         f.close()
 
     def getURL(self):
-        return '/'.join( self._id[3:])
+        return os.sep.join([STATIC_REL_PATH] + self._id)
 
     def getLink(self, linkText):
         return str(HtmlCore().link(linkText, self.getURL()))
         #return '<a href=%s>%s</a>' % (self.getURL(), linkText)
+
+    def getEmbeddedImage(self):
+        return str(HtmlCore().image(self.getURL()))
 
     def getLoadToHistoryLink(self, linkText, galaxyDataType='bed'):
         return str(HtmlCore().link(linkText, getLoadToGalaxyHistoryURL(self.getDiskPath(), galaxyDataType)) )
@@ -130,6 +133,7 @@ class StaticFile(object):
         from quick.application.ExternalTrackManager import ExternalTrackManager
         return ExternalTrackManager.createStdTrackName(self._id[:-1], self._id[-1] )
 
+
 class StaticImage(StaticFile):
     def __init__(self, id):
         StaticFile.__init__(self, ['images']+id)
@@ -148,6 +152,15 @@ class GalaxyRunSpecificFile(StaticFile):
         galaxyId = galaxyFn if type(galaxyFn) in (list,tuple) else extractIdFromGalaxyFn(galaxyFn)
         StaticFile.__init__(self, getUniqueRunSpecificId(galaxyId + id))
 
+    def getDiskPath(self, ensurePath=True):
+        fn = os.sep.join( [GALAXY_FILE_PATH] + [self._id[1], 'dataset_'+self._id[2]+'_files'] + self._id[3:])
+        if ensurePath:
+            ensurePathExists(fn)
+        return fn
+
+    def getURL(self):
+        return '/'.join( self._id[3:])
+
 
 class PickleStaticFile(StaticFile):
     def storePickledObject(self, obj):
@@ -157,6 +170,7 @@ class PickleStaticFile(StaticFile):
     def loadPickledObject(self):
         from cPickle import load
         return load( self.getFile('r') )
+
 
 class RunSpecificPickleFile(GalaxyRunSpecificFile, PickleStaticFile):
     def __init__(self, galaxyFn):
