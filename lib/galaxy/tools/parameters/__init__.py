@@ -2,12 +2,14 @@
 Classes encapsulating Galaxy tool parameters.
 """
 
-from basic import *
-from grouping import *
-from galaxy.util.json import *
+from basic import DataCollectionToolParameter, DataToolParameter, SelectToolParameter
+from grouping import Conditional, Repeat, Section, UploadDataset
+from galaxy.util.json import dumps, json_fix, loads
+
+REPLACE_ON_TRUTHY = object()
 
 
-def visit_input_values( inputs, input_values, callback, name_prefix="", label_prefix="" ):
+def visit_input_values( inputs, input_values, callback, name_prefix="", label_prefix="", no_replacement_value=REPLACE_ON_TRUTHY ):
     """
     Given a tools parameter definition (`inputs`) and a specific set of
     parameter `values`, call `callback` for each non-grouping parameter,
@@ -26,28 +28,33 @@ def visit_input_values( inputs, input_values, callback, name_prefix="", label_pr
                 index = d['__index__']
                 new_name_prefix = name_prefix + "%s_%d|" % ( input.name, index )
                 new_label_prefix = label_prefix + "%s %d > " % ( input.title, i + 1 )
-                visit_input_values( input.inputs, d, callback, new_name_prefix, new_label_prefix )
+                visit_input_values( input.inputs, d, callback, new_name_prefix, new_label_prefix, no_replacement_value=no_replacement_value )
         elif isinstance( input, Conditional ):
             values = input_values[ input.name ]
             current = values["__current_case__"]
             label_prefix = label_prefix
             new_name_prefix = name_prefix + input.name + "|"
-            visit_input_values( input.cases[current].inputs, values, callback, new_name_prefix, label_prefix )
+            visit_input_values( input.cases[current].inputs, values, callback, new_name_prefix, label_prefix, no_replacement_value=no_replacement_value )
         elif isinstance( input, Section ):
             values = input_values[ input.name ]
             label_prefix = label_prefix
             new_name_prefix = name_prefix + input.name + "|"
-            visit_input_values( input.inputs, values, callback, new_name_prefix, label_prefix )
+            visit_input_values( input.inputs, values, callback, new_name_prefix, label_prefix, no_replacement_value=no_replacement_value )
         else:
             new_value = callback( input,
                                   input_values[input.name],
                                   prefixed_name=name_prefix + input.name,
                                   prefixed_label=label_prefix + input.label )
-            if new_value:
+
+            if no_replacement_value is REPLACE_ON_TRUTHY:
+                replace = bool(new_value)
+            else:
+                replace = new_value != no_replacement_value
+            if replace:
                 input_values[input.name] = new_value
 
 
-def check_param( trans, param, incoming_value, param_values, source='html' ):
+def check_param( trans, param, incoming_value, param_values, source='html', history=None, workflow_building_mode=False ):
     """
     Check the value of a single parameter `param`. The value in
     `incoming_value` is converted from its HTML encoding and validated.
@@ -58,6 +65,8 @@ def check_param( trans, param, incoming_value, param_values, source='html' ):
     value = incoming_value
     error = None
     try:
+        if history is None:
+            history = trans.history
         if value is not None or isinstance( param, DataToolParameter ) or isinstance( param, DataCollectionToolParameter ):
             # Convert value from HTML representation
             if source == 'html':
@@ -67,10 +76,10 @@ def check_param( trans, param, incoming_value, param_values, source='html' ):
             # Allow the value to be converted if necessary
             filtered_value = param.filter_value( value, trans, param_values )
             # Then do any further validation on the value
-            param.validate( filtered_value, trans.history )
+            param.validate( filtered_value, history, workflow_building_mode=workflow_building_mode )
         elif value is None and isinstance( param, SelectToolParameter ):
             # An empty select list or column list
-            param.validate( value, trans.history )
+            param.validate( value, history, workflow_building_mode=workflow_building_mode )
     except ValueError, e:
         error = str( e )
     return value, error
@@ -117,7 +126,7 @@ def params_to_incoming( incoming, inputs, input_values, app, name_prefix="", to_
     """
     for input in inputs.itervalues():
         if isinstance( input, Repeat ) or isinstance( input, UploadDataset ):
-            for i, d in enumerate( input_values[ input.name ] ):
+            for d in input_values[ input.name ]:
                 index = d['__index__']
                 new_name_prefix = name_prefix + "%s_%d|" % ( input.name, index )
                 params_to_incoming( incoming, input.inputs, d, app, new_name_prefix, to_html=to_html)

@@ -25,7 +25,7 @@
         tip_str = ''
         sharable_link_label = 'Link to this repository revision:'
         sharable_link_changeset_revision = changeset_revision
-    
+
     if heads:
         multiple_heads = len( heads ) > 1
     else:
@@ -119,8 +119,7 @@
         </div>
         %if repository.long_description:
             <div class="form-row">
-                <p>${repository.long_description|h}</p>
-                ## ${render_long_description( to_html_string( repository.long_description ) )}
+                ${render_long_description( to_html_string( repository.long_description ) )}
             </div>
         %endif
         %if repository.homepage_url:
@@ -143,7 +142,7 @@
         %if can_download or can_push:
             <div class="form-row">
                 <b>Clone this repository:</b>
-                <code>hg clone ${ repository.clone_url }</code>
+                <code>hg clone <a title="Show in mercurial browser" href="${ repository.clone_url }">${ repository.clone_url }</a></code>
                 <button title="to clipboard" class="btn btn-default btn-xs" id="clone_clipboard"><span class="fa fa-clipboard"></span></button>
             </div>
         %endif

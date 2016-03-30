@@ -172,6 +172,33 @@ paste.app_factory = galaxy.web.buildapp:app_factory
 # from the Tool Shed will fail.
 #tool_dependency_dir = None
 
+# The dependency resolves config file specifies an ordering and options for how 
+# Galaxy resolves tool dependencies (requirement tags in Tool XML). The default
+# ordering is to the use the tool shed for tools installed that way, use local
+# Galaxy packages, and then use conda if available.
+# See https://github.com/galaxyproject/galaxy/blob/dev/doc/source/admin/dependency_resolvers.rst
+# for more information on these options.
+#dependency_resolvers_config_file = config/dependency_resolvers_conf.xml
+
+# Following conda dependeny resolution options are experimental as of early
+# 2016. These will change the defaults for each conda resolver, but multiple
+# resolvers can be configured independently and these options overridden in
+# dependency_resolvers_config_file.
+#conda_prefix = <tool_dependency_dir>/_conda
+# Override the conda executable to use, it will default to the one on the
+# PATH (if available) and then to <conda_prefix>/bin/conda
+#conda_exec =
+# Pass debug flag to conda commands.
+#conda_debug = False
+# conda channels to enable by default (http://conda.pydata.org/docs/custom-channels.html)
+#conda_ensure_channels = r,bioconda
+# Set to True to instruct Galaxy to look for and install missing tool
+# dependencies before each job runs.
+#conda_auto_install = False
+# Set to True to instruct Galaxy to install conda from the web automatically
+# if it cannot find a local copy and conda_exec is not configured.
+#conda_auto_init = False
+
 # File containing the Galaxy Tool Sheds that should be made available to
 # install from in the admin interface (.sample used if default does not exist).
 #tool_sheds_config_file = config/tool_sheds_conf.xml
@@ -246,8 +273,17 @@ paste.app_factory = galaxy.web.buildapp:app_factory
 # environment plugins.  By default none will be loaded.  Set to
 # config/plugins/interactive_environments to load Galaxy's stock plugins
 # (currently just IPython).  These will require Docker to be configured and
-# have security considerations, so proceed with caution.
+# have security considerations, so proceed with caution. The path is relative to the 
+# Galaxy root dir.  To use an absolute path begin the path with '/'.  This is a comma
+# separated list.
 #interactive_environment_plugins_directory =
+
+# Interactive tour directory: where to store interactive tour definition files.
+# Galaxy ships with several basic interface tours enabled, though a different
+# directory with custom tours can be specified here. The path is relative to the 
+# Galaxy root dir.  To use an absolute path begin the path with '/'.  This is a comma
+# separated list.
+#tour_config_dir = config/plugins/tours
 
 # Each job is given a unique empty directory as its current working directory.
 # This option defines in what parent directory those directories will be
@@ -261,6 +297,23 @@ paste.app_factory = galaxy.web.buildapp:app_factory
 # Mako templates are compiled as needed and cached for reuse, this directory is
 # used for the cache
 #template_cache_path = database/compiled_templates
+
+# Set to false to disable various checks Galaxy will do to ensure it
+# can run job scripts before attempting to execute or submit them.
+#check_job_script_integrity = True
+# Number of checks to execute if check_job_script_integrity is enabled.
+#check_job_script_integrity_count = 35
+# Time to sleep between checks if check_job_script_integrity is enabled (in seconds).
+#check_job_script_integrity_sleep = .25
+
+
+# Set the default shell used by jobs Galaxy-wide. This defaults to
+# sh and can be overidden at the destination level for
+# heterogenous clusters. conda job resolution requires bash or zsh
+# so if this is not switched to /bin/bash for instance - conda resolution
+# should be disabled. (16.01 will likely be the last release with a
+# default of /bin/sh instead of /bin/bash).
+#default_job_shell = /bin/sh
 
 # Citation related caching.  Tool citations information maybe fetched from
 # external sources such as http://dx.doi.org/ by Galaxy - the following
@@ -292,44 +345,6 @@ paste.app_factory = galaxy.web.buildapp:app_factory
 # If this is set and exists, it overrides any other objectstore settings.
 # object_store_config_file = config/object_store_conf.xml
 
-# Object store backend module (valid options are: disk, s3, swift, irods,
-# distributed, hierarchical)
-#object_store = disk
-
-# *Extremely* old Galaxy instances created datasets at the root of the
-# `file_path` defined above.  If your Galaxy instance has datasets at the root
-# (instead of in directories composed by hashing the dataset id), you should
-# enable this option to allow Galaxy to find them.
-#object_store_check_old_style = False
-
-# Credentials used by certain (s3, swift) object store backends
-#os_access_key = <your cloud object store access key>
-#os_secret_key = <your cloud object store secret key>
-#os_bucket_name = <name of an existing object store bucket or container>
-
-# If using 'swift' object store, you must specify the following connection
-# properties
-#os_host = swift.rc.nectar.org.au
-#os_port = 8888
-#os_is_secure = False
-#os_conn_path = /
-
-# Reduced redundancy can be used only with the 's3' object store
-#os_use_reduced_redundancy = False
-
-# Path to cache directory for object store backends that utilize a cache (s3,
-# swift, irods)
-#object_store_cache_path = database/files/
-
-# Size (in GB) that the cache used by object store should be limited to.
-# If the value is not specified, the cache size will be limited only by the
-# file system size.
-#object_store_cache_size = 100
-
-# Configuration file for the distributed object store, if object_store =
-# distributed.  See the sample at distributed_object_store_conf.xml.sample
-#distributed_object_store_config_file = None
-
 
 # -- Mail and notification
 
@@ -350,8 +365,9 @@ paste.app_factory = galaxy.web.buildapp:app_factory
 # If your SMTP server requires SSL from the beginning of the connection
 # smtp_ssl = False
 
-# On the user registration form, users may choose to join the mailing list.
-# This is the address of the list they'll be subscribed to.
+# On the user registration form, users may choose to join a mailing list. This
+# is the address used to subscribe to the list. Uncomment and leave empty if you
+# want to remove this option from the user registration form.
 #mailing_join_addr = galaxy-announce-join@bx.psu.edu
 
 # Datasets in an error state include a link to report the error.  Those reports
@@ -532,11 +548,6 @@ nglims_config_file = tool-data/nglims.yaml
 #static_style_dir = static/june_2007_style/blue
 #static_robots_txt = static/robots.txt
 
-# Cloud Launch
-
-#enable_cloud_launch = False
-#cloudlaunch_default_ami = ami-a7dbf6ce
-
 # Incremental Display Options
 
 #display_chunk_size = 65536
@@ -616,7 +627,17 @@ nglims_config_file = tool-data/nglims.yaml
 # nodejs to wrap connections in SSL).
 #dynamic_proxy_external_proxy=False
 
+# Additionally, when the dynamic proxy is proxied by an upstream server, you'll
+# want to specify a prefixed URL so both Galaxy and the proxy reside under the
+# same path that your cookies are under. This will result in a url like
+# https://FQDN/galaxy-prefix/gie_proxy for proxying
+#dynamic_proxy_prefix=gie_proxy
+
 # -- Logging and Debugging
+
+# If True, Galaxy will attempt to configure a simple root logger if a
+# "loggers" section does not appear in this configuration file.
+#auto_configure_logging = True
 
 # Verbosity of console log messages.  Acceptable values can be found here:
 # https://docs.python.org/2/library/logging.html#logging-levels
@@ -636,11 +657,24 @@ nglims_config_file = tool-data/nglims.yaml
 # log_events and log_actions functionality will eventually be merged.
 #log_actions = True
 
+
+# Fluentd configuration.  Various events can be logged to the fluentd instance
+# configured below by enabling fluent_log.
+#fluent_log = False
+#fluent_host = localhost
+#fluent_port = 24224
+
 # Sanitize all HTML tool output.  By default, all tool output served as
 # 'text/html' will be sanitized thoroughly.  This can be disabled if you have
 # special tools that require unaltered output.  WARNING: disabling this does
 # make the Galaxy instance susceptible to XSS attacks initiated by your users.
 #sanitize_all_html = True
+
+# Whitelist sanitization file.
+# Datasets created by tools listed in this file are trusted and will not have
+# their HTML sanitized on display.  This can be manually edited or manipulated
+# through the Admin control panel -- see "Manage Display Whitelist"
+#sanitize_whitelist_file = config/sanitize_whitelist.txt
 
 # By default Galaxy will serve non-HTML tool output that may potentially
 # contain browser executable JavaScript content as plain text.  This will for
@@ -658,9 +692,8 @@ nglims_config_file = tool-data/nglims.yaml
 # Debug enables access to various config options useful for development and
 # debugging: use_lint, use_profile, use_printdebug and use_interactive.  It
 # also causes the files used by PBS/SGE (submission script, output, and error)
-# to remain on disk after the job is complete.  Debug mode is disabled if
-# commented, but is uncommented by default in the sample config.
-debug = True
+# to remain on disk after the job is complete.
+#debug = False
 
 # Check for WSGI compliance.
 #use_lint = False
@@ -679,6 +712,20 @@ use_interactive = True
 # space rapidly!).  Useful to determine why your processes may be consuming a
 # lot of CPU.
 #use_heartbeat = False
+
+# Log to Sentry
+# Sentry is an open source logging and error aggregation platform.  Setting
+# sentry_dsn will enable the Sentry middleware and errors will be sent to the
+# indicated sentry instance.  This connection string is available in your
+# sentry instance under <project_name> -> Settings -> API Keys.
+#sentry_dsn = None
+
+# Log to statsd
+# Statsd is an external statistics aggregator (https://github.com/etsy/statsd)
+# Enabling the following options will cause galaxy to log request timing and
+# other statistics to the configured statsd instance.
+#statsd_host=
+#statsd_port=8125
 
 # -- Data Libraries
 
@@ -800,6 +847,10 @@ use_interactive = True
 # Force everyone to log in (disable anonymous access).
 #require_login = False
 
+# Show the site's welcome page (see welcome_url) alongside the login page
+# (even if require_login is True)
+#show_welcome_with_login = False
+
 # Allow unregistered users to create new accounts (otherwise, they will have to
 # be created by an admin).
 #allow_user_creation = True
@@ -831,21 +882,27 @@ use_interactive = True
 #expose_user_email = False
 
 # -- Beta features
-
-# Use new tool form
-#toolform_upgrade = True
-
-# Use new tool form in workflow editor
-#workflow_toolform_upgrade = False
+# Enable new run workflow form
+#run_workflow_toolform_upgrade = False
 
 # Enable Galaxy to communicate directly with a sequencer
 #enable_sequencer_communication = False
 
 # Separate tool command from rest of job script so tool dependencies
-# don't interfer with metadata generation (this will be the default
-# in a future release).
-#enable_beta_tool_command_isolation = False
+# don't interfer with metadata generation.
+# Despite the name, this feature is enabled by default
+# in 16.01 and the option will go away in the future.
+#enable_beta_tool_command_isolation = True
 
+
+# Set the following to a number of threads greater than 1 to spawn
+# a Python task queue for dealing with large tool submissions (either
+# through the tool form or as part of an individual workflow step across
+# large collection). The size of a "large" tool request is controlled by 
+# the second parameter below and defaults to 10. This affects workflow 
+# scheduling and web processes, not job handlers.
+#tool_submission_burst_threads = 1
+#tool_submission_burst_at = 10
 
 # Enable beta workflow modules that should not yet be considered part of Galaxy's
 # stable API.
@@ -948,12 +1005,9 @@ use_interactive = True
 #job_config_file = config/job_conf.xml
 
 # In multiprocess configurations, notification between processes about new jobs
-# is done via the database.  In single process configurations, this is done in
-# memory, which is a bit quicker.  Galaxy tries to automatically determine
-# which method it should used based on your handler configuration in the job
-# config file, but you can explicitly override this behavior by setting the
-# following option to True or False.
-#track_jobs_in_database = None
+# must be done via the database.  In single process configurations, this can be
+# done in memory, which is a bit quicker.
+#track_jobs_in_database = True
 
 # This enables splitting of jobs into tasks, if specified by the particular tool
 # config.
@@ -975,9 +1029,10 @@ use_interactive = True
 
 # Very large metadata values can cause Galaxy crashes.  This will allow
 # limiting the maximum metadata key size (in bytes used in memory, not the end
-# result database value size) Galaxy will attempt to save with a dataset.  0 to
-# disable this feature.  5000000 seems to be a reasonable size.
-#max_metadata_value_size = 0
+# result database value size) Galaxy will attempt to save with a dataset.  Use
+# 0 to disable this feature.  The default is 5MB, but as low as 1MB seems to be
+# a reasonable size.
+#max_metadata_value_size = 5242880
 
 # If (for example) you run on a cluster and your datasets (by default,
 # database/files/) are mounted read-only, this option will override tool output

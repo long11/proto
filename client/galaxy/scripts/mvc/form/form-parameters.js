@@ -5,8 +5,9 @@ define(['utils/utils',
         'mvc/ui/ui-misc',
         'mvc/form/form-select-content',
         'mvc/ui/ui-select-library',
+        'mvc/ui/ui-select-ftp',
         'mvc/ui/ui-color-picker'],
-    function(Utils, Ui, SelectContent, SelectLibrary, ColorPicker) {
+    function(Utils, Ui, SelectContent, SelectLibrary, SelectFtp, ColorPicker) {
 
     // create form view
     return Backbone.Model.extend({
@@ -26,9 +27,10 @@ define(['utils/utils',
             'hidden'            : '_fieldHidden',
             'hidden_data'       : '_fieldHidden',
             'baseurl'           : '_fieldHidden',
-            'library_data'      : '_fieldLibrary'
+            'library_data'      : '_fieldLibrary',
+            'ftpfile'           : '_fieldFtp'
         },
-        
+
         // initialize
         initialize: function(app, options) {
             this.app = app;
@@ -45,50 +47,32 @@ define(['utils/utils',
                 input_def.default_value = input_def.value;
             }
 
-            // field wrapper
+            // create field wrapper
             var field = null;
-
-            // get field class
             var fieldClass = this.types[input_def.type];
             if (fieldClass && typeof(this[fieldClass]) === 'function') {
                 field = this[fieldClass].call(this, input_def);
             }
-            
-            // identify field type
-            if (!field) {
-                // flag
-                this.app.incompatible = true;
 
-                // with or without options
+            // match unavailable field types
+            if (!field) {
+                this.app.incompatible = true;
                 if (input_def.options) {
-                    // assign select field
                     field = this._fieldSelect(input_def);
                 } else {
-                    // assign text field
                     field = this._fieldText(input_def);
                 }
-
-                // log
-                console.debug('tools-form::_addRow() : Auto matched field type (' + input_def.type + ').');
+                Galaxy.emit.debug('form-parameters::_addRow()', 'Auto matched field type (' + input_def.type + ').');
             }
 
-            // set field value
-            if (input_def.value !== undefined) {
-                field.value(input_def.value);
-            }
-
-            // return field element
+            // set initial field value
+            input_def.value !== undefined && ( field.value( input_def.value ) );
             return field;
         },
 
         /** Data input field
         */
         _fieldData: function(input_def) {
-            if (this.app.options.is_workflow) {
-                input_def.info = 'Data input \'' + input_def.name + '\' (' + Utils.textify(input_def.extensions.toString()) + ')';
-                input_def.value = null;
-                return this._fieldHidden(input_def);
-            }
             var self = this;
             return new SelectContent.View(this.app, {
                 id          : 'field-' + input_def.id,
@@ -106,9 +90,9 @@ define(['utils/utils',
         /** Select/Checkbox/Radio options field
         */
         _fieldSelect: function (input_def) {
-            // show text field in if dynamic fields are disabled e.g. in workflow editor
-            if (input_def.options.length == 0 && this.app.options.is_workflow) {
-                return this._fieldText(input_def);
+            // show text field e.g. in workflow editor
+            if( input_def.is_workflow ) {
+                return this._fieldText( input_def );
             }
 
             // customize properties
@@ -137,7 +121,7 @@ define(['utils/utils',
                     break;
             }
 
-            // select field
+            // create select field
             var self = this;
             return new SelectClass.View({
                 id          : 'field-' + input_def.id,
@@ -156,9 +140,9 @@ define(['utils/utils',
         /** Drill down options field
         */
         _fieldDrilldown: function (input_def) {
-            // show text field in if dynamic fields are disabled e.g. in workflow editor
-            if (input_def.options.length == 0 && this.app.options.is_workflow) {
-                return this._fieldText(input_def);
+            // show text field e.g. in workflow editor
+            if( input_def.is_workflow ) {
+                return this._fieldText( input_def );
             }
 
             // create drill down field
@@ -172,18 +156,15 @@ define(['utils/utils',
                 }
             });
         },
-        
+
         /** Text input field
         */
         _fieldText: function(input_def) {
             // field replaces e.g. a select field
             if (input_def.options) {
-                // show text area if selecting multiple entries is allowed
                 input_def.area = input_def.multiple;
-
-                // validate value
                 if (!Utils.validate(input_def.value)) {
-                    input_def.value = '';
+                    input_def.value = null;
                 } else {
                     if ($.isArray(input_def.value)) {
                         var str_value = '';
@@ -217,6 +198,7 @@ define(['utils/utils',
             return new Ui.Slider.View({
                 id          : 'field-' + input_def.id,
                 precise     : input_def.type == 'float',
+                is_workflow : input_def.is_workflow,
                 min         : input_def.min,
                 max         : input_def.max,
                 onchange    : function() {
@@ -265,6 +247,20 @@ define(['utils/utils',
         _fieldLibrary: function(input_def) {
             var self = this;
             return new SelectLibrary.View({
+                id          : 'field-' + input_def.id,
+                optional    : input_def.optional,
+                multiple    : input_def.multiple,
+                onchange    : function() {
+                    self.app.trigger('change');
+                }
+            });
+        },
+
+        /** FTP file field
+        */
+        _fieldFtp: function(input_def) {
+            var self = this;
+            return new SelectFtp.View({
                 id          : 'field-' + input_def.id,
                 optional    : input_def.optional,
                 multiple    : input_def.multiple,

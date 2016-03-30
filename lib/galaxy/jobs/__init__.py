@@ -17,6 +17,7 @@ import subprocess
 import sys
 import traceback
 from galaxy import model, util
+from galaxy.util.xml_macros import load
 from galaxy.datatypes import metadata
 from galaxy.exceptions import ObjectInvalid, ObjectNotFound
 from galaxy.jobs.actions.post import ActionBox
@@ -36,14 +37,14 @@ from .datasets import DatasetPath
 
 log = logging.getLogger( __name__ )
 
-DATABASE_MAX_STRING_SIZE = util.DATABASE_MAX_STRING_SIZE
-DATABASE_MAX_STRING_SIZE_PRETTY = util.DATABASE_MAX_STRING_SIZE_PRETTY
-
 # This file, if created in the job's working directory, will be used for
 # setting advanced metadata properties on the job and its associated outputs.
 # This interface is currently experimental, is only used by the upload tool,
 # and should eventually become API'd
 TOOL_PROVIDED_JOB_METADATA_FILE = 'galaxy.json'
+
+# Override with config.default_job_shell.
+DEFAULT_JOB_SHELL = '/bin/sh'
 
 
 class JobDestination( Bunch ):
@@ -57,6 +58,7 @@ class JobDestination( Bunch ):
         self['runner'] = None
         self['legacy'] = False
         self['converted'] = False
+        self['shell'] = None
         self['env'] = []
         self['resubmit'] = []
         # dict is appropriate (rather than a bunch) since keys may not be valid as attributes
@@ -94,7 +96,7 @@ class JobToolConfiguration( Bunch ):
 def config_exception(e, file):
     abs_path = os.path.abspath(file)
     message = 'Problem parsing the XML in file %s, ' % abs_path
-    message += 'please correct the indicated portion of the file and restart Galaxy.'
+    message += 'please correct the indicated portion of the file and restart Galaxy. '
     message += str(e)
     log.exception(message)
     return Exception(message)
@@ -129,7 +131,7 @@ class JobConfiguration( object ):
         # Initialize the config
         job_config_file = self.app.config.job_config_file
         try:
-            tree = util.parse_xml(job_config_file)
+            tree = load(job_config_file)
             self.__parse_job_conf_xml(tree)
         except IOError:
             log.warning( 'Job configuration "%s" does not exist, using legacy'
@@ -191,6 +193,9 @@ class JobConfiguration( object ):
                             else:
                                 self.handlers[tag] = [id]
 
+        # Must define at least one handler to have a default.
+        if not self.handlers:
+            raise ValueError("Job configuration file defines no valid handler elements.")
         # Determine the default handler(s)
         self.default_handler_id = self.__get_default(handlers, self.handlers.keys())
 
@@ -285,9 +290,8 @@ class JobConfiguration( object ):
         """
         log.debug('Loading job configuration from %s' % self.app.config.config_file)
 
-        # Always load local and lwr
-        self.runner_plugins = [dict(id='local', load='local', workers=self.app.config.local_job_queue_workers),
-                               dict(id='lwr', load='lwr', workers=self.app.config.cluster_job_queue_workers)]
+        # Always load local
+        self.runner_plugins = [dict(id='local', load='local', workers=self.app.config.local_job_queue_workers)]
         # Load tasks if configured
         if self.app.config.use_tasked_jobs:
             self.runner_plugins.append(dict(id='tasks', load='tasks', workers=self.app.config.local_task_queue_workers))
@@ -764,6 +768,7 @@ class JobWrapper( object ):
         if use_persisted_destination:
             self.job_runner_mapper.cached_job_destination = JobDestination( from_job=job )
 
+        self.__commands_in_new_shell = self.app.config.commands_in_new_shell
         self.__user_system_pwent = None
         self.__galaxy_system_pwent = None
 
@@ -786,14 +791,28 @@ class JobWrapper( object ):
         return self.tool.parallelism
 
     @property
+    def shell(self):
+        return self.job_destination.shell or getattr(self.app.config, 'default_job_shell', DEFAULT_JOB_SHELL)
+
+    def disable_commands_in_new_shell(self):
+        """Provide an extension point to disable this isolation,
+        Pulsar builds its own job script so this is not needed for
+        remote jobs."""
+        self.__commands_in_new_shell = False
+
+    @property
     def commands_in_new_shell(self):
-        return self.app.config.commands_in_new_shell
+        return self.__commands_in_new_shell
 
     @property
     def galaxy_lib_dir(self):
         if self.__galaxy_lib_dir is None:
             self.__galaxy_lib_dir = os.path.abspath( "lib" )  # cwd = galaxy root
         return self.__galaxy_lib_dir
+
+    @property
+    def galaxy_virtual_env(self):
+        return os.environ.get('VIRTUAL_ENV', None)
 
     # legacy naming
     get_job_runner = get_job_runner_url
@@ -855,14 +874,14 @@ class JobWrapper( object ):
 
         self.sa_session.flush()
 
-        self.command_line, self.extra_filenames = tool_evaluator.build()
+        self.command_line, self.extra_filenames, self.environment_variables = tool_evaluator.build()
         # Ensure galaxy_lib_dir is set in case there are any later chdirs
         self.galaxy_lib_dir
         # Shell fragment to inject dependencies
-        self.dependency_shell_commands = self.tool.build_dependency_shell_commands()
+        self.dependency_shell_commands = self.tool.build_dependency_shell_commands(job_directory=self.working_directory)
         # We need command_line persisted to the db in order for Galaxy to re-queue the job
         # if the server was stopped and restarted before the job finished
-        job.command_line = self.command_line
+        job.command_line = unicodify(self.command_line)
         self.sa_session.add( job )
         self.sa_session.flush()
         # Return list of all extra files
@@ -983,18 +1002,11 @@ class JobWrapper( object ):
                 self.sa_session.add( dataset )
                 self.sa_session.flush()
             job.set_final_state( job.states.ERROR )
-            job.command_line = self.command_line
+            job.command_line = unicodify(self.command_line)
             job.info = message
             # TODO: Put setting the stdout, stderr, and exit code in one place
             # (not duplicated with the finish method).
-            if ( len( stdout ) > DATABASE_MAX_STRING_SIZE ):
-                stdout = util.shrink_string_by_size( stdout, DATABASE_MAX_STRING_SIZE, join_by="\n..\n", left_larger=True, beginning_on_size_error=True )
-                log.info( "stdout for job %d is greater than %s, only a portion will be logged to database" % ( job.id, DATABASE_MAX_STRING_SIZE_PRETTY ) )
-            job.stdout = stdout
-            if ( len( stderr ) > DATABASE_MAX_STRING_SIZE ):
-                stderr = util.shrink_string_by_size( stderr, DATABASE_MAX_STRING_SIZE, join_by="\n..\n", left_larger=True, beginning_on_size_error=True )
-                log.info( "stderr for job %d is greater than %s, only a portion will be logged to database" % ( job.id, DATABASE_MAX_STRING_SIZE_PRETTY ) )
-            job.stderr = stderr
+            job.set_streams( stdout, stderr )
             # Let the exit code be Null if one is not provided:
             if ( exit_code is not None ):
                 job.exit_code = exit_code
@@ -1032,22 +1044,33 @@ class JobWrapper( object ):
         self.sa_session.add( job )
         self.sa_session.flush()
 
-    def change_state( self, state, info=False ):
-        job = self.get_job()
-        self.sa_session.refresh( job )
+    def change_state( self, state, info=False, flush=True, job=None ):
+        job_supplied = job is not None
+        if not job_supplied:
+            job = self.get_job()
+            self.sa_session.refresh( job )
+        # Else:
+        # If this is a new job (e.g. initially queued) - we are in the same
+        # thread and no other threads are working on the job yet - so don't refresh.
+
+        if job.state in model.Job.terminal_states:
+            log.warning( "(%s) Ignoring state change from '%s' to '%s' for job "
+                         "that is already terminal", job.id, job.state, state )
+            return
         for dataset_assoc in job.output_datasets + job.output_library_datasets:
             dataset = dataset_assoc.dataset
-            self.sa_session.refresh( dataset )
-            dataset.state = state
+            if not job_supplied:
+                self.sa_session.refresh( dataset )
+            dataset.raw_set_dataset_state( state )
             if info:
                 dataset.info = info
             self.sa_session.add( dataset )
-            self.sa_session.flush()
         if info:
             job.info = info
         job.set_state( state )
         self.sa_session.add( job )
-        self.sa_session.flush()
+        if flush:
+            self.sa_session.flush()
 
     def get_state( self ):
         job = self.get_job()
@@ -1058,22 +1081,23 @@ class JobWrapper( object ):
         log.warning('set_runner() is deprecated, use set_job_destination()')
         self.set_job_destination(self.job_destination, external_id)
 
-    def set_job_destination( self, job_destination, external_id=None ):
+    def set_job_destination( self, job_destination, external_id=None, flush=True, job=None ):
         """
         Persist job destination params in the database for recovery.
 
         self.job_destination is not used because a runner may choose to rewrite
         parts of the destination (e.g. the params).
         """
-        job = self.get_job()
-        self.sa_session.refresh(job)
+        if job is None:
+            job = self.get_job()
         log.debug('(%s) Persisting job destination (destination id: %s)' % (job.id, job_destination.id))
         job.destination_id = job_destination.id
         job.destination_params = job_destination.params
         job.job_runner_name = job_destination.runner
         job.job_runner_external_id = external_id
         self.sa_session.add(job)
-        self.sa_session.flush()
+        if flush:
+            self.sa_session.flush()
 
     def finish( self, stdout, stderr, tool_exit_code=None, remote_working_directory=None ):
         """
@@ -1082,8 +1106,6 @@ class JobWrapper( object ):
         the contents of the output files.
         """
         finish_timer = util.ExecutionTimer()
-        stdout = unicodify( stdout )
-        stderr = unicodify( stderr )
 
         # default post job setup
         self.sa_session.expunge_all()
@@ -1188,8 +1210,8 @@ class JobWrapper( object ):
                     # either use the metadata from originating output dataset, or call set_meta on the copies
                     # it would be quicker to just copy the metadata from the originating output dataset,
                     # but somewhat trickier (need to recurse up the copied_from tree), for now we'll call set_meta()
-                    if ( not self.external_output_metadata.external_metadata_set_successfully( dataset, self.sa_session )
-                         and self.app.config.retry_metadata_internally ):
+                    if ( self.app.config.retry_metadata_internally and
+                            not self.external_output_metadata.external_metadata_set_successfully(dataset, self.sa_session ) ):
                         # If Galaxy was expected to sniff type and didn't - do so.
                         if dataset.ext == "_sniff_":
                             extension = sniff.handle_uploaded_dataset_file( dataset.dataset.file_name, self.app.datatypes_registry )
@@ -1197,8 +1219,8 @@ class JobWrapper( object ):
 
                         # call datatype.set_meta directly for the initial set_meta call during dataset creation
                         dataset.datatype.set_meta( dataset, overwrite=False )
-                    elif ( not self.external_output_metadata.external_metadata_set_successfully( dataset, self.sa_session )
-                           and job.states.ERROR != final_job_state ):
+                    elif ( job.states.ERROR != final_job_state and
+                            not self.external_output_metadata.external_metadata_set_successfully( dataset, self.sa_session ) ):
                         dataset._state = model.Dataset.states.FAILED_METADATA
                     else:
                         # load metadata from file
@@ -1240,7 +1262,7 @@ class JobWrapper( object ):
                         dataset.extension = 'txt'
                 self.sa_session.add( dataset )
             if job.states.ERROR == final_job_state:
-                log.debug( "setting dataset state to ERROR" )
+                log.debug( "(%s) setting dataset %s state to ERROR", job.id, dataset_assoc.dataset.dataset.id )
                 # TODO: This is where the state is being set to error. Change it!
                 dataset_assoc.dataset.dataset.state = model.Dataset.states.ERROR
                 # Pause any dependent jobs (and those jobs' outputs)
@@ -1261,17 +1283,14 @@ class JobWrapper( object ):
         # Flush all the dataset and job changes above.  Dataset state changes
         # will now be seen by the user.
         self.sa_session.flush()
-        # Save stdout and stderr
-        if len( job.stdout ) > DATABASE_MAX_STRING_SIZE:
-            log.info( "stdout for job %d is greater than %s, only a portion will be logged to database" % ( job.id, DATABASE_MAX_STRING_SIZE_PRETTY ) )
-        job.stdout = util.shrink_string_by_size( job.stdout, DATABASE_MAX_STRING_SIZE, join_by="\n..\n", left_larger=True, beginning_on_size_error=True )
-        if len( job.stderr ) > DATABASE_MAX_STRING_SIZE:
-            log.info( "stderr for job %d is greater than %s, only a portion will be logged to database" % ( job.id, DATABASE_MAX_STRING_SIZE_PRETTY ) )
-        job.stderr = util.shrink_string_by_size( job.stderr, DATABASE_MAX_STRING_SIZE, join_by="\n..\n", left_larger=True, beginning_on_size_error=True )
+
+        # Shrink streams and ensure unicode.
+        job.set_streams( job.stdout, job.stderr )
+
         # The exit code will be null if there is no exit code to be set.
         # This is so that we don't assign an exit code, such as 0, that
         # is either incorrect or has the wrong semantics.
-        if None != tool_exit_code:
+        if tool_exit_code is not None:
             job.exit_code = tool_exit_code
         # custom post process setup
         inp_data = dict( [ ( da.name, da.dataset ) for da in job.input_datasets ] )
@@ -1313,16 +1332,16 @@ class JobWrapper( object ):
         self.tool.call_hook( 'exec_after_process', self.queue.app, inp_data=inp_data,
                              out_data=out_data, param_dict=param_dict,
                              tool=self.tool, stdout=job.stdout, stderr=job.stderr )
-        job.command_line = self.command_line
+        job.command_line = unicodify(self.command_line)
 
-        bytes = 0
+        collected_bytes = 0
         # Once datasets are collected, set the total dataset size (includes extra files)
         for dataset_assoc in job.output_datasets:
             dataset_assoc.dataset.dataset.set_total_size()
-            bytes += dataset_assoc.dataset.dataset.get_total_size()
+            collected_bytes += dataset_assoc.dataset.dataset.get_total_size()
 
         if job.user:
-            job.user.total_disk_usage += bytes
+            job.user.adjust_total_disk_usage(collected_bytes)
 
         # Empirically, we need to update job.user and
         # job.workflow_invocation_step.workflow_invocation in separate
@@ -1394,7 +1413,7 @@ class JobWrapper( object ):
         job = has_metrics.get_job()
         per_plugin_properties = self.app.job_metrics.collect_properties( job.destination_id, self.job_id, self.working_directory )
         if per_plugin_properties:
-            log.info( "Collecting job metrics for %s" % has_metrics )
+            log.info( "Collecting metrics for %s %s" % ( type(has_metrics).__name__, getattr( has_metrics, 'id', None ) ) )
         for plugin, properties in per_plugin_properties.iteritems():
             for metric_name, metric_value in properties.iteritems():
                 if metric_value is not None:
@@ -1565,6 +1584,7 @@ class JobWrapper( object ):
     def setup_external_metadata( self, exec_dir=None, tmp_dir=None,
                                  dataset_files_path=None, config_root=None,
                                  config_file=None, datatypes_config=None,
+                                 resolve_metadata_dependencies=False,
                                  set_extension=True, **kwds ):
         # extension could still be 'auto' if this is the upload tool.
         job = self.get_job()
@@ -1585,19 +1605,29 @@ class JobWrapper( object ):
             config_file = self.app.config.config_file
         if datatypes_config is None:
             datatypes_config = self.app.datatypes_registry.integrated_datatypes_configs
-        return self.external_output_metadata.setup_external_metadata( [ output_dataset_assoc.dataset for
-                                                                        output_dataset_assoc in
-                                                                        job.output_datasets + job.output_library_datasets ],
-                                                                      self.sa_session,
-                                                                      exec_dir=exec_dir,
-                                                                      tmp_dir=tmp_dir,
-                                                                      dataset_files_path=dataset_files_path,
-                                                                      config_root=config_root,
-                                                                      config_file=config_file,
-                                                                      datatypes_config=datatypes_config,
-                                                                      job_metadata=os.path.join( self.working_directory, TOOL_PROVIDED_JOB_METADATA_FILE ),
-                                                                      max_metadata_value_size=self.app.config.max_metadata_value_size,
-                                                                      **kwds )
+        base_command = self.external_output_metadata.setup_external_metadata( [ output_dataset_assoc.dataset for
+                                                                                output_dataset_assoc in
+                                                                                job.output_datasets + job.output_library_datasets ],
+                                                                              self.sa_session,
+                                                                              exec_dir=exec_dir,
+                                                                              tmp_dir=tmp_dir,
+                                                                              dataset_files_path=dataset_files_path,
+                                                                              config_root=config_root,
+                                                                              config_file=config_file,
+                                                                              datatypes_config=datatypes_config,
+                                                                              job_metadata=os.path.join( self.working_directory, TOOL_PROVIDED_JOB_METADATA_FILE ),
+                                                                              max_metadata_value_size=self.app.config.max_metadata_value_size,
+                                                                              **kwds )
+        command = base_command
+        if resolve_metadata_dependencies:
+            metadata_tool = self.app.toolbox.get_tool("__SET_METADATA__")
+            if metadata_tool is not None:
+                # Due to tool shed hacks for migrate and installed tool tests...
+                dependency_shell_commands = metadata_tool.build_dependency_shell_commands(job_directory=self.working_directory)
+                if dependency_shell_commands:
+                    dependency_shell_commands = "; ".join(dependency_shell_commands)
+                    command = "%s; %s" % (dependency_shell_commands, command)
+        return command
 
     @property
     def user( self ):
@@ -1742,12 +1772,12 @@ class TaskWrapper(JobWrapper):
 
         self.sa_session.flush()
 
-        self.command_line, self.extra_filenames = tool_evaluator.build()
+        self.command_line, self.extra_filenames, self.environment_variables = tool_evaluator.build()
 
         # Ensure galaxy_lib_dir is set in case there are any later chdirs
         self.galaxy_lib_dir
         # Shell fragment to inject dependencies
-        self.dependency_shell_commands = self.tool.build_dependency_shell_commands()
+        self.dependency_shell_commands = self.tool.build_dependency_shell_commands(job_directory=self.working_directory)
         # We need command_line persisted to the db in order for Galaxy to re-queue the job
         # if the server was stopped and restarted before the job finished
         task.command_line = self.command_line
@@ -1763,7 +1793,7 @@ class TaskWrapper(JobWrapper):
         self.status = 'error'
         # How do we want to handle task failure?  Fail the job and let it clean up?
 
-    def change_state( self, state, info=False ):
+    def change_state( self, state, info=False, flush=True, job=None ):
         task = self.get_task()
         self.sa_session.refresh( task )
         if info:
@@ -1799,8 +1829,6 @@ class TaskWrapper(JobWrapper):
         the output datasets based on stderr and stdout from the command, and
         the contents of the output files.
         """
-        stdout = unicodify( stdout )
-        stderr = unicodify( stderr )
 
         # This may have ended too soon
         log.debug( 'task %s for job %d ended; exit code: %d'
@@ -1828,13 +1856,8 @@ class TaskWrapper(JobWrapper):
             task.state = task.states.ERROR
 
         # Save stdout and stderr
-        if len( stdout ) > DATABASE_MAX_STRING_SIZE:
-            log.error( "stdout for task %d is greater than %s, only a portion will be logged to database" % ( task.id, DATABASE_MAX_STRING_SIZE_PRETTY ) )
-        task.stdout = util.shrink_string_by_size( stdout, DATABASE_MAX_STRING_SIZE, join_by="\n..\n", left_larger=True, beginning_on_size_error=True )
-        if len( stderr ) > DATABASE_MAX_STRING_SIZE:
-            log.error( "stderr for task %d is greater than %s, only a portion will be logged to database" % ( task.id, DATABASE_MAX_STRING_SIZE_PRETTY ) )
+        task.set_streams( stdout, stderr )
         self._collect_metrics( task )
-        task.stderr = util.shrink_string_by_size( stderr, DATABASE_MAX_STRING_SIZE, join_by="\n..\n", left_larger=True, beginning_on_size_error=True )
         task.exit_code = tool_exit_code
         task.command_line = self.command_line
         self.sa_session.flush()

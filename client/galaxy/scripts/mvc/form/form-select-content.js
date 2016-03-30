@@ -1,10 +1,5 @@
 // dependencies
-define(['utils/utils', 'mvc/ui/ui-misc', 'mvc/ui/ui-tabs', 'mvc/tools/tools-template'],
-        function(Utils, Ui, Tabs, ToolTemplate) {
-
-// track current history elements
-history = {};
-
+define(['utils/utils', 'mvc/ui/ui-misc', 'mvc/ui/ui-tabs'], function(Utils, Ui, Tabs) {
 // hda/hdca content selector ui element
 var View = Backbone.View.extend({
     // initialize
@@ -12,6 +7,10 @@ var View = Backbone.View.extend({
         // link app and options
         this.app = app;
         this.options = options;
+
+        // track current history elements
+        this.history = {};
+
 
         // link this
         var self = this;
@@ -100,8 +99,11 @@ var View = Backbone.View.extend({
                 value   : 'collection',
                 tooltip : 'Dataset collection'
             });
+            var multiple = this.mode == 'multiple';
             this.select_collection = new Ui.Select.View({
                 error_text  : hdca_error,
+                multiple    : multiple,
+                searchable  : false,
                 optional    : options.optional,
                 onchange    : function() {
                     self.trigger('change');
@@ -193,14 +195,15 @@ var View = Backbone.View.extend({
                 for (var i in options) {
                     var item = options[i];
                     select_options.push({
+                        hid  : item.hid,
                         label: item.hid + ': ' + item.name,
                         value: item.id
                     });
                     // backup to local history
-                    history[item.id + '_' + item.src] = item;
+                    self.history[item.id + '_' + item.src] = item;
                 }
                 // update field
-                field.update(select_options);
+                field.add( select_options, function( a, b ) { return b.hid - a.hid } );
             }
         }
 
@@ -221,11 +224,11 @@ var View = Backbone.View.extend({
                     for (var i in new_value.values) {
                         list.push(new_value.values[i].id);
                     }
-                    
+
                     // identify suitable select field
                     if (new_value && new_value.values.length > 0 && new_value.values[0].src == 'hdca') {
                         this.current = 'collection';
-                        this.select_collection.value(list[0]);
+                        this.select_collection.value(list);
                     } else {
                         if (this.mode == 'multiple') {
                             this.current = 'multiple';
@@ -236,7 +239,7 @@ var View = Backbone.View.extend({
                         }
                     }
                 } catch (err) {
-                    console.debug('tools-select-content::value() - Skipped.');
+                    Galaxy.emit.debug('tools-select-content::value()', 'Skipped.');
                 }
             } else {
                 for (var i in this.list) {
@@ -272,7 +275,7 @@ var View = Backbone.View.extend({
 
         // append to dataset ids
         for (var i in id_list) {
-            var details = history[id_list[i] + '_' + this.list[this.current].type];
+            var details = this.history[id_list[i] + '_' + this.list[this.current].type];
             if (details) {
                 result.values.push(details);
             } else {
@@ -315,7 +318,7 @@ var View = Backbone.View.extend({
     /** Assists in identifying the batch mode */
     _batch: function() {
         if (this.current == 'collection') {
-            var hdca = history[this._select().value() + '_hdca'];
+            var hdca = this.history[this._select().value() + '_hdca'];
             if (hdca && hdca.map_over_type) {
                 return true;
             }
@@ -330,7 +333,7 @@ var View = Backbone.View.extend({
 
     /** Batch message template */
     template_batch: function() {
-        return  '<div class="ui-table-form-info">' +
+        return  '<div class="ui-form-info">' +
                     '<i class="fa fa-sitemap" style="font-size: 1.2em; padding: 2px 5px;"/>' +
                     'This is a batch mode input field. A separate job will be triggered for each dataset.' +
                 '</div>';

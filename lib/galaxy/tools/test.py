@@ -14,7 +14,7 @@ log = logging.getLogger( __name__ )
 DEFAULT_FTYPE = 'auto'
 DEFAULT_DBKEY = 'hg17'
 DEFAULT_INTERACTOR = "api"  # Default mechanism test code uses for interacting with Galaxy instance.
-DEFAULT_MAX_SECS = 120
+DEFAULT_MAX_SECS = None
 
 
 @nottest
@@ -42,13 +42,15 @@ class ToolTestBuilder( object ):
 
     def __init__( self, tool, test_dict, i, default_interactor ):
         name = test_dict.get( 'name', 'Test-%d' % (i + 1) )
-        maxseconds = int( test_dict.get( 'maxseconds', DEFAULT_MAX_SECS ) )
+        maxseconds = test_dict.get( 'maxseconds', DEFAULT_MAX_SECS )
+        if maxseconds is not None:
+            maxseconds = int( maxseconds )
 
         self.tool = tool
         self.name = name
         self.maxseconds = maxseconds
         self.required_files = []
-        self.inputs = []
+        self.inputs = {}
         self.outputs = []
         # By default do not making assertions on number of outputs - but to
         # test filtering allow explicitly state number of outputs.
@@ -134,6 +136,7 @@ class ToolTestBuilder( object ):
             self.expect_failure = test_dict.get("expect_failure", False)
             self.md5 = test_dict.get("md5", None)
         except Exception, e:
+            self.inputs = {}
             self.error = True
             self.exception = e
 
@@ -156,7 +159,8 @@ class ToolTestBuilder( object ):
                     for input_name, input_value in case.inputs.items():
                         case_inputs = self.__process_raw_inputs( { input_name: input_value }, raw_inputs, parent_context=cond_context )
                         expanded_inputs.update( case_inputs )
-                    expanded_case_value = self.__split_if_str( case.value )
+                    if not value.type == "text":
+                        expanded_case_value = self.__split_if_str( case.value )
                     if case_value is not None:
                         # A bit tricky here - we are growing inputs with value
                         # that may be implicit (i.e. not defined by user just
@@ -191,7 +195,8 @@ class ToolTestBuilder( object ):
                 raw_input = context.extract_value( raw_inputs )
                 if raw_input:
                     (name, param_value, param_extra) = raw_input
-                    param_value = self.__split_if_str( param_value )
+                    if not value.type == "text":
+                        param_value = self.__split_if_str( param_value )
                     if isinstance( value, galaxy.tools.parameters.basic.DataToolParameter ):
                         if not isinstance(param_value, list):
                             param_value = [ param_value ]
