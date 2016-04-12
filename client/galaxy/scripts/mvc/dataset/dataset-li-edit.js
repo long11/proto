@@ -157,6 +157,7 @@ var DatasetListItemEdit = _super.extend(
     /** Render icon-button to re-run the job that created this dataset. */
     _renderRerunButton : function(){
         var creating_job = this.model.get( 'creating_job' );
+        var rerun_url = this.model.urls.rerun;
         if( this.model.get( 'rerunnable' ) ){
             return faIconButton({
                 title       : _l( 'Run this job again' ),
@@ -171,7 +172,11 @@ var DatasetListItemEdit = _super.extend(
                     require([ 'mvc/tool/tool-form' ], function( ToolForm ){
                         var form = new ToolForm.View({ 'job_id' : creating_job });
                         form.deferred.execute( function(){
-                            Galaxy.app.display( form );
+                            //console.log(form.options);
+                            if (form.options.model_class.startsWith('HyperBrowser'))
+                                galaxy_main.location = rerun_url;
+                            else
+                                Galaxy.app.display( form );
                         });
                     });
                 }

@@ -114,12 +114,23 @@ class ToolRunner( BaseUIController ):
             else:
                 raise Exception("Failed to get job information for dataset hid %d" % data.hid)
 
+        # Get the tool object
+        tool_id = job.tool_id
+        tool = self.__get_tool(tool_id)
+
         if tool.tool_type.startswith('hyperbrowser'):
+            # Get the job's parameters
+            try:
+                params_objects = job.get_param_values(trans.app, ignore_errors=True)
+            except:
+                raise Exception('Failed to get job params')
+
             return trans.response.send_redirect(
-                url_for(controller='proto', action='index', mako=params_objects.get('mako', 'generictool'),
-                        rerun_hda_id=id))
+                    url_for(controller='proto', action='index', mako=params_objects.get('mako', 'generictool'),
+                            rerun_hda_id=id))
 
         return trans.response.send_redirect( url_for( controller="root", job_id=job_id ) )
+
 
     @web.expose
     def data_source_redirect( self, trans, tool_id=None ):
