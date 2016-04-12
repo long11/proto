@@ -4,6 +4,9 @@ Releases
 .. toctree::
    :maxdepth: 1
 
+   16.01_announce
+   15.10_announce
+   15.07_announce
    15.05_announce
    15.03_announce
    15.01_announce
