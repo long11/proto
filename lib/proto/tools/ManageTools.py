@@ -278,7 +278,23 @@ class InstallToolsTool(GeneralGuiTool):
             tf.write(tool_xml)
         
         toolConf.write()
-        
+
+        print '''
+        <script type="text/javascript">
+            $().ready(function() {
+                $("#reload_toolbox").click(function(){
+                    $.ajax({
+                    url: "/api/configuration/toolbox",
+                    type: 'PUT'
+                    }).done(function() {
+                            top.location.reload();
+                        }
+                    );
+                });
+            });
+        </script>
+        '''
+        print '<a id="reload_toolbox" href="#">Reload toolbox/menu</a>'
         print '<pre>' + escape(xml) + '</pre>' + '<pre>' + escape(tool_xml) + '</pre>'
         
 
