@@ -312,7 +312,7 @@ class GenerateToolsTool(GeneralGuiTool):
     @staticmethod
     def getInputBoxNames():
         return [('Package name', 'packageName'),
-                ('Module name', 'moduleName'),
+                ('Module/class name', 'moduleName'),
                 ('Tool name', 'toolName'),
                 ('Use template with inline documentation', 'template')]
 
