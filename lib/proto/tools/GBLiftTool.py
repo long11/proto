@@ -7,7 +7,7 @@ class GBLiftTool(GeneralGuiTool):
         Specifies a header of the tool, which is displayed at the top of the
         page.
         '''
-	return "Tool not yet in use"
+	return "Graph Based Liftover"
 
     @staticmethod
     def getInputBoxNames():
@@ -25,11 +25,15 @@ class GBLiftTool(GeneralGuiTool):
         getOptionsBoxK, where K is either a number in the range of 1 to the
         number of boxes (case 1), or the specified key (case 2).
         '''
-        return [('First header','firstKey'),
-                ('Second Header', 'secondKey')]
+        
+        return [('Choose mode:', 'firstKey'),
+        		('Filedata', 'genome1'),
+        		('Genome1 size', 'thirdKey'), 
+        		('Genome2 size', 'fourthKey'), 
+        		('Position filename genome1', 'fifthKey'),
+        		('Position filename genome2', 'sixthKey')]
 
     #@staticmethod
-    #def getInputBoxOrder():
     #    '''
     #    Specifies the order in which the input boxes should be displayed, as a
     #    list. The input boxes are specified by index (starting with 1) or by
@@ -84,11 +88,12 @@ class GBLiftTool(GeneralGuiTool):
         Check box list:         OrderedDict([('key1', True), ('key2', False), ('key3', False)])
         - Returns: OrderedDict from key to selection status (bool).
         '''
-        return ['testChoice1', 'testChoice2', '...']
+        
+        return ['Example testing', 'Real values']
 
     @staticmethod
-    def getOptionsBoxSecondKey(prevChoices): # Alternatively: getOptionsBox2()
-        '''
+    def getOptionsBoxGenome1(prevChoices): # Alternatively: getOptionsBox2()
+    	'''
         See getOptionsBoxFirstKey().
 
         prevChoices is a namedtuple of selections made by the user in the
@@ -97,15 +102,28 @@ class GBLiftTool(GeneralGuiTool):
         prevChoices[0] for the result of input box 1, or by key, e.g.
         prevChoices.key (case 2).
         '''
-        return 'TEST TEST'
+        return ('__history__',)
+        #return prevChoices[0]
+        #if (prevChoices[0] == 'Example testing'):
+        #	return "HELLO"
+        
+        #return 'second'
 
-    #@staticmethod
-    #def getOptionsBox3(prevChoices):
-    #    return ['']
+    @staticmethod
+    def getOptionsBoxThirdKey(prevChoices):
+        return ['third']
 
-    #@staticmethod
-    #def getOptionsBox4(prevChoices):
-    #    return ['']
+    @staticmethod
+    def getOptionsBoxFourthKey(prevChoices):
+        return ['fourth']
+
+    @staticmethod
+    def getOptionsBoxFifthKey(prevChoices):
+        return ['fifth']
+
+    @staticmethod
+    def getOptionsBoxSixthKey(prevChoices):
+        return ['sixth']
 
     #@staticmethod
     #def getDemoSelections():
@@ -122,6 +140,13 @@ class GBLiftTool(GeneralGuiTool):
         (e.g. generated image files). choices is a list of selections made by
         web-user in each options box.
         '''
+
+        #-----------------------------------------------------
+        #START THE ALGORITHM BY IMPORTING IT
+        #from graph10.py import *
+        #...
+        #-----------------------------------------------------
+        
         print 'Executing...'
 
     @staticmethod
