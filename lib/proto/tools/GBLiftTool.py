@@ -89,7 +89,7 @@ class GBLiftTool(GeneralGuiTool):
         - Returns: OrderedDict from key to selection status (bool).
         '''
         
-        return ('__history__', )
+        return ['Example testing', 'Real values']
 
     @staticmethod
     def getOptionsBoxGenome1(prevChoices): # Alternatively: getOptionsBox2()
