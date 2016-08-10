@@ -107,7 +107,7 @@ class GBLiftTool(GeneralGuiTool):
         #if (prevChoices[0] == 'Example testing'):
         #	return "HELLO"
         
-        #return 'second'
+        return 'second'
 
     @staticmethod
     def getOptionsBoxThirdKey(prevChoices):
