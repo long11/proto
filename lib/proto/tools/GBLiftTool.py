@@ -102,12 +102,12 @@ class GBLiftTool(GeneralGuiTool):
         prevChoices[0] for the result of input box 1, or by key, e.g.
         prevChoices.key (case 2).
         '''
-        #return ('__history__',)
+        return ('__history__',)
         #return prevChoices[0]
         #if (prevChoices[0] == 'Example testing'):
         #	return "HELLO"
         
-        return 'second'
+        #return 'second'
 
     @staticmethod
     def getOptionsBoxThirdKey(prevChoices):
